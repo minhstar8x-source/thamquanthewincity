@@ -35,11 +35,12 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [registrations, setRegistrations] = useState([]);
-  const [adminsList, setAdminsList] = useState([]); // Danh sách admin từ database
+  const [adminsList, setAdminsList] = useState([]); 
   const [view, setView] = useState('form'); 
   
-  // --- Form State ---
+  // Lấy ngày hiện tại định dạng YYYY-MM-DD
   const today = new Date().toISOString().split('T')[0];
+  
   const [selectedDate, setSelectedDate] = useState(today);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -48,7 +49,6 @@ export default function App() {
   const [submitStatus, setSubmitStatus] = useState({ loading: false, success: false, error: null });
   const [newAdminEmail, setNewAdminEmail] = useState('');
 
-  // --- Auth Effect ---
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -58,7 +58,7 @@ export default function App() {
           await signInAnonymously(auth);
         }
       } catch (error) {
-        console.error("Lỗi xác thực mặc định:", error);
+        console.error("Lỗi xác thực:", error);
       }
     };
     initAuth();
@@ -69,34 +69,25 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // --- Lấy dữ liệu từ Firestore (Đăng ký & Phân quyền) ---
   useEffect(() => {
     if (!user) return;
-
-    // Tải danh sách đăng ký
     const regPath = collection(db, 'artifacts', appId, 'public', 'data', 'registrations'); 
     const unsubReg = onSnapshot(regPath, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setRegistrations(data);
     });
 
-    // Tải danh sách Admin được phân quyền động
     const adminPath = collection(db, 'artifacts', appId, 'public', 'data', 'admins');
     const unsubAdmin = onSnapshot(adminPath, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setAdminsList(data);
     });
 
-    return () => {
-      unsubReg();
-      unsubAdmin();
-    };
+    return () => { unsubReg(); unsubAdmin(); };
   }, [user]);
 
-  // --- Logic kiểm tra Quyền Quản Trị ---
   useEffect(() => {
     if (user?.email) {
-      // User là admin nếu nằm trong list gốc HOẶC có tên trong database
       const isSuper = SUPER_ADMIN_EMAILS.includes(user.email);
       const isDynamicAdmin = adminsList.some(a => a.email === user.email);
       setIsAdmin(isSuper || isDynamicAdmin);
@@ -105,14 +96,6 @@ export default function App() {
     }
   }, [user, adminsList]);
 
-  // Đẩy người dùng về form nếu mất quyền
-  useEffect(() => {
-    if (view === 'admin' && !isAdmin) {
-      setView('form');
-    }
-  }, [view, isAdmin]);
-
-  // --- Cấu hình Khung Giờ & Logic ---
   const MAX_PER_SLOT = 10;
   const SLOTS = ['9:00', '9:30', '10:00', '15:00', '15:30', '16:00', '16:30'];
 
@@ -129,53 +112,13 @@ export default function App() {
     return counts;
   }, [todayRegistrations]);
 
-  const isDayFull = SLOTS.every(slot => slotCounts[slot] >= MAX_PER_SLOT);
-
-  useEffect(() => {
-    if (isDayFull) {
-      setSelectedSlot('');
-    } else {
-      if (!selectedSlot || slotCounts[selectedSlot] >= MAX_PER_SLOT) {
-        const firstAvailable = SLOTS.find(slot => slotCounts[slot] < MAX_PER_SLOT);
-        if (firstAvailable) setSelectedSlot(firstAvailable);
-      }
-    }
-  }, [selectedDate, isDayFull, slotCounts, selectedSlot]);
-
-
-  // --- Xử lý sự kiện Tài Khoản ---
   const handleAdminLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      const result = await signInWithPopup(auth, provider);
-      const email = result.user.email;
-      
-      // Chờ một chút để logic check admin chạy, nếu không phải admin thì log out
-      setTimeout(async () => {
-        // Cần lấy latest state, nhưng ta có thể check thủ công ngay đây
-        const isSuper = SUPER_ADMIN_EMAILS.includes(email);
-        const isDynamic = adminsList.some(a => a.email === email);
-        
-        if (!isSuper && !isDynamic) {
-          alert(`Tài khoản ${email} chưa được cấp quyền quản trị!`);
-          await signOut(auth);
-          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            await signInWithCustomToken(auth, __initial_auth_token);
-          } else {
-            await signInAnonymously(auth);
-          }
-        }
-      }, 500);
-
+      await signInWithPopup(auth, provider);
     } catch (error) {
-      console.error("Lỗi đăng nhập:", error);
-      // Xử lý lỗi Unauthorized Domain hiển thị cho người dùng dễ hiểu
       if (error.code === 'auth/unauthorized-domain') {
-        alert(`LỖI TÊN MIỀN CHƯA ĐƯỢC CẤP PHÉP\n\nĐể sửa lỗi này:\n1. Mở Firebase Console -> Authentication -> tab Settings (Cài đặt).\n2. Chọn 'Authorized domains' (Miền được ủy quyền).\n3. Bấm 'Add domain' và dán đường link web của bạn vào (ví dụ: tên-app.stackblitz.io).\n4. Lưu lại và thử đăng nhập lại.`);
-      } else if (error.code === 'auth/popup-closed-by-user') {
-        // Bỏ qua nếu người dùng tự đóng popup
-      } else {
-        alert("Đăng nhập thất bại. Vui lòng kiểm tra lại cấu hình Firebase.");
+        alert("LỖI: Bạn cần thêm tên miền này vào mục 'Authorized domains' trong Firebase Console.");
       }
     }
   };
@@ -183,73 +126,19 @@ export default function App() {
   const handleAdminLogout = async () => {
     await signOut(auth);
     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-      await signInWithCustomToken(auth, __initial_auth_token);
+        await signInWithCustomToken(auth, __initial_auth_token);
     } else {
-      await signInAnonymously(auth);
+        await signInAnonymously(auth);
     }
     setView('form');
   };
 
-  // --- Phân Quyền (Admins) ---
-  const handleAddAdmin = async (e) => {
-    e.preventDefault();
-    if (!isAdmin || !newAdminEmail.trim()) return;
-
-    const emailToAdd = newAdminEmail.trim().toLowerCase();
-
-    // Check trùng lặp
-    if (SUPER_ADMIN_EMAILS.includes(emailToAdd) || adminsList.some(a => a.email === emailToAdd)) {
-      alert("Email này đã có quyền quản trị rồi!");
-      return;
-    }
-
-    try {
-      const adminPath = collection(db, 'artifacts', appId, 'public', 'data', 'admins');
-      await addDoc(adminPath, {
-        email: emailToAdd,
-        addedBy: user.email,
-        timestamp: serverTimestamp()
-      });
-      setNewAdminEmail('');
-      alert(`Đã cấp quyền thành công cho ${emailToAdd}`);
-    } catch (error) {
-      console.error("Lỗi thêm admin:", error);
-      alert("Có lỗi xảy ra, không thể cấp quyền.");
-    }
-  };
-
-  const handleRemoveAdmin = async (id, email) => {
-    if (!isAdmin) return;
-    if (email === user.email) {
-      alert("Bạn không thể tự xóa quyền của chính mình tại đây!");
-      return;
-    }
-    if (!window.confirm(`Thu hồi quyền quản trị của ${email}?`)) return;
-
-    try {
-      const docPath = doc(db, 'artifacts', appId, 'public', 'data', 'admins', id);
-      await deleteDoc(docPath);
-    } catch (error) {
-      console.error("Lỗi xóa admin:", error);
-      alert("Không thể thu hồi quyền, vui lòng thử lại.");
-    }
-  };
-
-  // --- Submit Đăng Ký ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!user || !name.trim() || !phone.trim() || !agency.trim() || !selectedSlot) return;
-
-    if (slotCounts[selectedSlot] >= MAX_PER_SLOT) {
-      setSubmitStatus({ loading: false, success: false, error: 'Khung giờ này vừa đầy. Vui lòng chọn giờ khác.' });
-      return;
-    }
-
     setSubmitStatus({ loading: true, success: false, error: null });
-
     try {
       const path = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
-      
       await addDoc(path, {
         name: name.trim(),
         phone: phone.trim(),
@@ -259,409 +148,198 @@ export default function App() {
         timestamp: serverTimestamp(),
         userId: user.uid
       });
-
       setSubmitStatus({ loading: false, success: true, error: null });
-      setName('');
-      setPhone('');
-      setAgency('');
-      
-      setTimeout(() => {
-        setSubmitStatus(prev => ({ ...prev, success: false }));
-      }, 4000);
-
+      setName(''); setPhone(''); setAgency('');
+      setTimeout(() => setSubmitStatus(prev => ({ ...prev, success: false })), 4000);
     } catch (error) {
-      console.error("Lỗi khi gửi:", error);
-      setSubmitStatus({ loading: false, success: false, error: 'Có lỗi xảy ra, thử lại sau.' });
+      setSubmitStatus({ loading: false, success: false, error: 'Có lỗi xảy ra khi gửi đăng ký.' });
     }
   };
 
   const handleDelete = async (id) => {
-    if (!isAdmin || !window.confirm("Bạn muốn xóa đăng ký này?")) return;
+    if (!isAdmin || !window.confirm("Xóa đăng ký này?")) return;
     try {
       const docPath = doc(db, 'artifacts', appId, 'public', 'data', 'registrations', id);
       await deleteDoc(docPath);
-    } catch (error) {
-      console.error("Lỗi xóa:", error);
-    }
+    } catch (error) { console.error(error); }
   };
 
-  // --- Giao diện (UI) ---
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  if (!user) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div></div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800 font-sans">
-      {/* Navbar */}
-      <nav className="bg-white shadow-sm sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <Calendar className="h-6 w-6 text-blue-600 mr-2" />
-              <span className="font-bold text-xl text-gray-900 hidden sm:inline-block">The Win City</span>
-            </div>
-            <div className="flex items-center space-x-2 sm:space-x-4 overflow-x-auto">
-              <button 
-                onClick={() => setView('form')}
-                className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${view === 'form' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                <ClipboardList className="h-4 w-4 mr-1.5" />
-                Đăng ký
-              </button>
-              
-              {isAdmin && (
-                <button 
-                  onClick={() => setView('admin')}
-                  className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${view === 'admin' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  <LayoutDashboard className="h-4 w-4 mr-1.5" />
-                  Bảng theo dõi
-                </button>
-              )}
-
-              {isAdmin ? (
-                <button 
-                  onClick={handleAdminLogout}
-                  className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-red-600 hover:bg-red-50 transition-colors whitespace-nowrap"
-                  title={user.email}
-                >
-                  <LogOut className="h-4 w-4 sm:mr-1.5" />
-                  <span className="hidden sm:inline-block">Đăng xuất</span>
-                </button>
-              ) : (
-                <button 
-                  onClick={handleAdminLogin}
-                  className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-100 transition-colors whitespace-nowrap"
-                >
-                  <LogIn className="h-4 w-4 sm:mr-1.5" />
-                  <span className="hidden sm:inline-block">Quản trị</span>
-                </button>
-              )}
-            </div>
+    <div className="min-h-screen bg-gray-100 text-gray-800 font-sans selection:bg-blue-100 overflow-x-hidden">
+      {/* Navbar Gọn gàng */}
+      <nav className="bg-white shadow-md sticky top-0 z-50">
+        <div className="max-w-5xl mx-auto px-4 flex justify-between h-14 items-center">
+          <div className="flex items-center font-bold text-lg text-blue-700 truncate mr-2">
+            <Calendar className="mr-2 h-5 w-5 flex-shrink-0"/>
+            <span className="truncate">The Win City</span>
+          </div>
+          <div className="flex space-x-1 sm:space-x-2">
+            <button onClick={() => setView('form')} className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${view === 'form' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}>Đăng ký</button>
+            {isAdmin && <button onClick={() => setView('admin')} className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${view === 'admin' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}>Admin</button>}
+            {isAdmin ? <button onClick={handleAdminLogout} className="text-red-500 px-2 py-1.5 text-xs font-medium hover:bg-red-50 rounded-md">Thoát</button> : <button onClick={handleAdminLogin} className="text-gray-400 px-2 py-1.5 text-xs font-medium hover:bg-gray-100 rounded-md">Quản trị</button>}
           </div>
         </div>
       </nav>
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        {/* VIEW: KHÁCH HÀNG ĐĂNG KÝ */}
+      <main className="max-w-5xl mx-auto p-4 pb-12">
         {view === 'form' && (
-          <div className="max-w-xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
-            
-            {/* --- PHẦN TIÊU ĐỀ CÓ LOGO VÀ HÌNH NỀN --- */}
+          <div className="max-w-xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
+            {/* Tiêu đề không có Logo */}
             <div 
-              className="relative px-6 py-10 text-center bg-cover bg-center"
+              className="relative px-6 py-12 text-center bg-cover bg-center"
               style={{ backgroundImage: "url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop')" }}
             >
-              {/* Lớp phủ màu xanh đen trong suốt để giữ cho chữ và logo luôn nổi bật dễ đọc */}
-              <div className="absolute inset-0 bg-blue-900/75"></div>
-              
-              <div className="relative z-10 flex flex-col items-center">
-                
-                <h2 className="text-xl sm:text-2xl font-bold text-white mb-2 drop-shadow-md">ĐĂNG KÝ THAM QUAN<br/>CÔNG TRƯỜNG THE WIN CITY</h2>
-                <p className="text-blue-50 text-sm mt-2 drop-shadow">Vui lòng chọn ngày và khung giờ phù hợp</p>
+              <div className="absolute inset-0 bg-gradient-to-b from-blue-900/90 to-blue-800/80"></div>
+              <div className="relative z-10 text-white">
+                <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight leading-tight">Tham Quan Công Trường</h2>
+                <div className="h-1 w-12 bg-blue-400 mx-auto my-3 rounded-full"></div>
+                <p className="text-xs sm:text-sm text-blue-100 font-medium italic">Vui lòng đăng ký trước để chúng tôi đón tiếp tốt nhất</p>
               </div>
             </div>
-            {/* --------------------------------------- */}
 
-            <div className="p-6 sm:p-8">
+            <div className="p-5 sm:p-8 space-y-6">
               {submitStatus.success && (
-                <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-start">
-                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 mr-3 flex-shrink-0" />
-                  <div>
-                    <h3 className="text-sm font-medium text-green-800">Đăng ký thành công!</h3>
-                    <p className="text-sm text-green-600 mt-1">Hẹn gặp bạn vào lúc {selectedSlot} ngày {selectedDate.split('-').reverse().join('/')}.</p>
-                  </div>
+                <div className="p-4 bg-green-50 border border-green-200 text-green-700 rounded-xl flex items-center animate-bounce">
+                  <CheckCircle className="mr-2 h-5 w-5"/> Đăng ký thành công!
                 </div>
               )}
 
-              {submitStatus.error && (
-                <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start">
-                  <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-3 flex-shrink-0" />
-                  <p className="text-sm text-red-700 font-medium">{submitStatus.error}</p>
-                </div>
-              )}
-
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Chọn ngày đăng ký</label>
-                  <input 
-                    type="date" 
-                    min={today}
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                    required
-                  />
-                </div>
-
-                {isDayFull ? (
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
-                    <Users className="h-8 w-8 text-amber-500 mx-auto mb-3" />
-                    <h3 className="text-lg font-semibold text-amber-800 mb-1">Đã kín lịch hôm nay</h3>
-                    <p className="text-sm text-amber-600">Rất tiếc, tất cả các khung giờ trong ngày {selectedDate.split('-').reverse().join('/')} đều đã đủ người. Vui lòng chọn ngày khác.</p>
+              <form onSubmit={handleSubmit} className="space-y-5">
+                {/* Chọn Ngày - Đã fix mobile */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">1. Chọn ngày tham quan</label>
+                  <div className="relative">
+                     <input 
+                      type="date" 
+                      min={today} // Chặn ngày quá khứ
+                      value={selectedDate} 
+                      onChange={(e) => setSelectedDate(e.target.value)} 
+                      className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm appearance-none" 
+                      required 
+                    />
                   </div>
-                ) : (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Chọn khung giờ</label>
-                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                        {SLOTS.map((slot) => {
-                          const isFull = slotCounts[slot] >= MAX_PER_SLOT;
-                          return (
-                            <label key={slot} className={`relative flex flex-col p-2 cursor-pointer rounded-lg border-2 transition-all ${
-                              isFull 
-                                ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed' 
-                                : selectedSlot === slot
-                                  ? 'border-blue-600 bg-blue-50'
-                                  : 'border-gray-200 hover:border-blue-200'
-                            }`}>
-                              <input 
-                                type="radio" 
-                                name="slot" 
-                                value={slot} 
-                                checked={selectedSlot === slot}
-                                onChange={() => setSelectedSlot(slot)}
-                                disabled={isFull}
-                                className="sr-only"
-                              />
-                              <div className="flex items-center justify-center sm:justify-between flex-wrap gap-1 mb-1">
-                                <span className={`text-base font-bold ${isFull ? 'text-gray-400' : 'text-blue-700'}`}>{slot}</span>
-                                {isFull && <span className="text-[10px] font-medium text-red-500 bg-red-100 px-1 py-0.5 rounded-md">Đầy</span>}
-                              </div>
-                              <div className="mt-auto border-t border-gray-200 pt-1 text-center sm:text-left">
-                                <span className="text-[11px] text-gray-500">
-                                  Còn {Math.max(0, MAX_PER_SLOT - slotCounts[slot])}/{MAX_PER_SLOT}
-                                </span>
-                              </div>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
+                </div>
 
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Họ và tên</label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <User className="h-5 w-5 text-gray-400" />
-                          </div>
-                          <input 
-                            type="text" 
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                            placeholder="Tên của bạn"
-                            required
-                          />
-                        </div>
-                      </div>
+                {/* Chọn Giờ - Đã tối ưu 3 cột */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">2. Chọn khung giờ</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {SLOTS.map(slot => {
+                      const isFull = slotCounts[slot] >= MAX_PER_SLOT;
+                      const isSelected = selectedSlot === slot;
+                      return (
+                        <button 
+                          key={slot} 
+                          type="button" 
+                          disabled={isFull}
+                          onClick={() => setSelectedSlot(slot)} 
+                          className={`py-3 px-1 text-xs font-bold rounded-xl border-2 transition-all flex flex-col items-center justify-center ${
+                            isFull 
+                              ? 'bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed' 
+                              : isSelected 
+                                ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200 scale-105' 
+                                : 'bg-white border-gray-100 text-gray-600 hover:border-blue-200'
+                          }`}
+                        >
+                          <span>{slot}</span>
+                          <span className={`text-[9px] mt-1 font-normal ${isSelected ? 'text-blue-100' : 'text-gray-400'}`}>
+                            {isFull ? 'Kín' : `Còn ${MAX_PER_SLOT - slotCounts[slot]}`}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Số điện thoại</label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Phone className="h-5 w-5 text-gray-400" />
-                          </div>
-                          <input 
-                            type="tel" 
-                            value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                            placeholder="SĐT liên hệ"
-                            required
-                          />
-                        </div>
-                      </div>
+                {/* Thông tin khách hàng */}
+                <div className="space-y-3 pt-2">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">3. Thông tin cá nhân</label>
+                  <div className="space-y-3">
+                    <input type="text" placeholder="Họ và tên của bạn" value={name} onChange={(e) => setName(e.target.value)} className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm" required />
+                    <input type="tel" placeholder="Số điện thoại" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm" required />
+                    <input type="text" placeholder="Tên đại lý (nếu có)" value={agency} onChange={(e) => setAgency(e.target.value)} className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm" required />
+                  </div>
+                </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Đại lý</label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Building className="h-5 w-5 text-gray-400" />
-                          </div>
-                          <input 
-                            type="text" 
-                            value={agency}
-                            onChange={(e) => setAgency(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                            placeholder="Tên đại lý (nếu có)"
-                            required
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <button 
-                      type="submit" 
-                      disabled={submitStatus.loading || !selectedSlot}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-all disabled:opacity-50"
-                    >
-                      {submitStatus.loading ? "Đang xử lý..." : "Xác Nhận Đăng Ký"}
-                    </button>
-                  </>
-                )}
+                <button 
+                  type="submit" 
+                  disabled={submitStatus.loading || !selectedSlot} 
+                  className="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white py-4 rounded-2xl font-bold shadow-xl shadow-blue-200 transition-all disabled:opacity-50 disabled:active:scale-100"
+                >
+                  {submitStatus.loading ? "ĐANG GỬI..." : "XÁC NHẬN ĐĂNG KÝ"}
+                </button>
               </form>
             </div>
           </div>
         )}
 
-        {/* VIEW: QUẢN TRỊ VIÊN THEO DÕI */}
+        {/* View Admin giữ nguyên các chức năng quản trị */}
         {view === 'admin' && isAdmin && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
-              <div className="bg-gray-800 px-6 py-5 flex flex-col sm:flex-row justify-between items-center gap-4">
-                <h2 className="text-xl font-bold text-white flex items-center">
-                  <LayoutDashboard className="h-5 w-5 mr-2" />
-                  Bảng Thống Kê
-                </h2>
-                
-                <div className="flex items-center bg-gray-700 rounded-lg p-1">
-                  <span className="text-gray-300 text-sm px-3">Ngày:</span>
-                  <input 
-                    type="date" 
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="bg-gray-600 text-white border-none rounded text-sm py-1.5 px-3 focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
+          <div className="space-y-4">
+             <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
+                <div className="bg-gray-900 p-4 flex flex-col sm:flex-row justify-between items-center gap-3">
+                  <h2 className="text-white font-bold flex items-center"><LayoutDashboard className="mr-2 h-5 w-5"/> Bảng Thống Kê</h2>
+                  <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-gray-800 text-white text-xs p-2 rounded-lg border-none focus:ring-1 focus:ring-blue-500 outline-none" />
                 </div>
-              </div>
-
-              {/* Thống kê ca */}
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-8 gap-2 p-4 bg-gray-50 border-b border-gray-100 overflow-x-auto">
-                {SLOTS.map((slot) => (
-                  <div key={slot} className="bg-white p-2 rounded-lg shadow-sm border border-gray-200 text-center min-w-[60px]">
-                    <p className="text-[11px] text-gray-500 font-medium">{slot}</p>
-                    <p className="text-base font-bold text-gray-900">{slotCounts[slot]} <span className="text-[9px] text-gray-400">/ 10</span></p>
-                  </div>
-                ))}
-                <div className="bg-green-50 p-2 rounded-lg shadow-sm border border-green-200 text-center min-w-[60px]">
-                  <p className="text-[11px] text-green-700 font-medium">Tổng</p>
-                  <p className="text-base font-bold text-green-700">{todayRegistrations.length}</p>
-                </div>
-              </div>
-
-              {/* Bảng dữ liệu */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[600px]">
-                  <thead>
-                    <tr className="bg-gray-100 text-gray-600 text-sm uppercase tracking-wider">
-                      <th className="p-4 font-medium border-b border-gray-200">Giờ</th>
-                      <th className="p-4 font-medium border-b border-gray-200">Khách hàng</th>
-                      <th className="p-4 font-medium border-b border-gray-200">Số điện thoại</th>
-                      <th className="p-4 font-medium border-b border-gray-200">Đại lý</th>
-                      <th className="p-4 font-medium border-b border-gray-200 text-right">Xóa</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {todayRegistrations.length === 0 ? (
-                      <tr>
-                        <td colSpan="5" className="p-8 text-center text-gray-500">
-                          Chưa có khách đăng ký ngày {selectedDate.split('-').reverse().join('/')}
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-500 border-b">
+                        <th className="p-3 font-medium uppercase text-[10px]">Giờ</th>
+                        <th className="p-3 font-medium uppercase text-[10px]">Tên</th>
+                        <th className="p-3 font-medium uppercase text-[10px]">SĐT</th>
+                        <th className="p-3 font-medium uppercase text-[10px]">Đại lý</th>
+                        <th className="p-3 text-right"></th>
                       </tr>
-                    ) : (
-                      [...todayRegistrations]
-                        .sort((a, b) => {
-                          const timeA = a.slot.padStart(5, '0');
-                          const timeB = b.slot.padStart(5, '0');
-                          return timeA.localeCompare(timeB) || (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0);
-                        })
-                        .map((reg) => (
-                        <tr key={reg.id} className="hover:bg-gray-50">
-                          <td className="p-4">
-                            <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded-md text-xs font-bold">{reg.slot}</span>
-                          </td>
-                          <td className="p-4 font-medium text-gray-900">{reg.name}</td>
-                          <td className="p-4 text-gray-600">{reg.phone}</td>
-                          <td className="p-4 text-gray-600">{reg.agency}</td>
-                          <td className="p-4 text-right">
-                            <button 
-                              onClick={() => handleDelete(reg.id)}
-                              className="text-gray-400 hover:text-red-500 transition-colors"
-                            >
-                              <Trash2 className="h-5 w-5 inline" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* QUẢN LÝ PHÂN QUYỀN (CHỈ ADMIN THẤY) */}
-            <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
-              <div className="bg-indigo-600 px-6 py-4">
-                <h2 className="text-lg font-bold text-white flex items-center">
-                  <Shield className="h-5 w-5 mr-2" />
-                  Cài Đặt Phân Quyền Quản Trị
-                </h2>
-              </div>
-              <div className="p-6">
-                <p className="text-sm text-gray-600 mb-4">
-                  Thêm Gmail của nhân sự để cấp quyền xem Bảng Thống Kê. Chỉ những người có quyền mới xem được khu vực này.
-                </p>
-                
-                {/* Form thêm admin */}
-                <form onSubmit={handleAddAdmin} className="flex gap-3 mb-6">
-                  <input 
-                    type="email" 
-                    value={newAdminEmail}
-                    onChange={(e) => setNewAdminEmail(e.target.value)}
-                    placeholder="Nhập địa chỉ Gmail..." 
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                    required
-                  />
-                  <button 
-                    type="submit"
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap"
-                  >
-                    Cấp quyền
-                  </button>
-                </form>
-
-                {/* Danh sách Admin */}
-                <div className="bg-gray-50 rounded-lg border border-gray-200">
-                  <ul className="divide-y divide-gray-200">
-                    {/* Super Admin cố định */}
-                    {SUPER_ADMIN_EMAILS.map((email, idx) => (
-                      <li key={`super-${idx}`} className="p-4 flex items-center justify-between">
-                        <div className="flex items-center">
-                          <ShieldAlert className="h-4 w-4 text-amber-500 mr-2" />
-                          <span className="font-medium text-gray-900">{email}</span>
-                        </div>
-                        <span className="text-xs font-semibold bg-amber-100 text-amber-700 px-2 py-1 rounded-md">
-                          Gốc
-                        </span>
-                      </li>
-                    ))}
-                    
-                    {/* Admin thêm động */}
-                    {adminsList.map(admin => (
-                      <li key={admin.id} className="p-4 flex items-center justify-between hover:bg-gray-100 transition-colors">
-                        <div className="flex items-center">
-                          <User className="h-4 w-4 text-gray-400 mr-2" />
-                          <span className="text-gray-700">{admin.email}</span>
-                        </div>
-                        <button 
-                          onClick={() => handleRemoveAdmin(admin.id, admin.email)}
-                          className="text-sm text-red-500 hover:text-red-700 font-medium"
-                        >
-                          Thu hồi
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                    </thead>
+                    <tbody className="divide-y">
+                      {todayRegistrations.length === 0 ? (
+                        <tr><td colSpan="5" className="p-10 text-center text-gray-400">Không có dữ liệu</td></tr>
+                      ) : (
+                        todayRegistrations.sort((a,b) => a.slot.localeCompare(b.slot)).map(reg => (
+                          <tr key={reg.id} className="hover:bg-blue-50/50">
+                            <td className="p-3 font-bold text-blue-600">{reg.slot}</td>
+                            <td className="p-3 font-medium">{reg.name}</td>
+                            <td className="p-3 text-gray-600">{reg.phone}</td>
+                            <td className="p-3 text-gray-500 italic">{reg.agency}</td>
+                            <td className="p-3 text-right">
+                               <button onClick={() => handleDelete(reg.id)} className="text-gray-300 hover:text-red-500"><Trash2 className="h-4 w-4"/></button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-              </div>
-            </div>
+             </div>
+             {/* Phần cấp quyền admin động */}
+             <div className="bg-white p-5 rounded-3xl shadow-xl border border-gray-100">
+                <h3 className="font-bold flex items-center text-gray-800 mb-4"><Shield className="mr-2 h-5 w-5 text-indigo-500"/> Cấp quyền Admin mới</h3>
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  if(!newAdminEmail.trim()) return;
+                  const adminPath = collection(db, 'artifacts', appId, 'public', 'data', 'admins');
+                  await addDoc(adminPath, { email: newAdminEmail.trim().toLowerCase(), timestamp: serverTimestamp() });
+                  setNewAdminEmail('');
+                  alert("Đã cấp quyền thành công!");
+                }} className="flex gap-2">
+                  <input type="email" placeholder="Gmail nhân viên..." value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} className="flex-1 p-3 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-indigo-400 text-sm" required />
+                  <button type="submit" className="bg-indigo-600 text-white px-4 py-3 rounded-2xl text-sm font-bold">THÊM</button>
+                </form>
+                <div className="mt-4 space-y-2">
+                  {adminsList.map(ad => (
+                    <div key={ad.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-xl border border-gray-100">
+                      <span className="text-xs text-gray-600">{ad.email}</span>
+                      <button onClick={async () => {
+                         if(!window.confirm("Thu hồi quyền?")) return;
+                         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'admins', ad.id));
+                      }} className="text-red-400 text-xs font-bold">XÓA</button>
+                    </div>
+                  ))}
+                </div>
+             </div>
           </div>
         )}
       </main>
