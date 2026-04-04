@@ -207,24 +207,27 @@ export default function App() {
               </div>
             </div>
 
-            <div className="p-5 sm:p-8 space-y-6">
+            <div className="px-4 py-6 sm:p-8 space-y-6">
               {submitStatus.success && (
                 <div className="p-4 bg-green-50 border border-green-200 text-green-700 rounded-xl flex items-center animate-bounce">
-                  <CheckCircle className="mr-2 h-5 w-5"/> Đăng ký thành công!
+                  <CheckCircle className="mr-2 h-5 w-5 flex-shrink-0"/> Đăng ký thành công!
                 </div>
               )}
 
               <form onSubmit={handleSubmit} className="space-y-5">
+                {/* Chọn Ngày - Đã fix lỗi bị cắt trên mobile */}
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">1. Chọn ngày tham quan</label>
-                  <input 
-                    type="date" 
-                    min={today} 
-                    value={selectedDate} 
-                    onChange={(e) => setSelectedDate(e.target.value)} 
-                    className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm" 
-                    required 
-                  />
+                  <div className="w-full">
+                    <input 
+                      type="date" 
+                      min={today} 
+                      value={selectedDate} 
+                      onChange={(e) => setSelectedDate(e.target.value)} 
+                      className="w-full px-3 py-3 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm block box-border" 
+                      required 
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
