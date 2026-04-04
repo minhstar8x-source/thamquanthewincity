@@ -199,7 +199,7 @@ export default function App() {
               className="relative px-6 py-12 text-center bg-cover bg-center"
               style={{ backgroundImage: "url('https://scontent.fsgn22-1.fna.fbcdn.net/v/t39.30808-6/660431692_122180502596789445_5003665343564458581_n.jpg?_nc_cat=107&ccb=1-7&_nc_sid=2a1932&_nc_ohc=jHjZgb04H28Q7kNvwH2hVPa&_nc_oc=AdoCgaIW2wuSOFyFC2M_KDfBiMK3woHbmlzmTOpXqYuF0nT6oMKa7a9-cFTwI_IKvto&_nc_zt=23&_nc_ht=scontent.fsgn22-1.fna&_nc_gid=tYYixgtD1TRQzDBPTgvrWA&_nc_ss=7a3a8&oh=00_Af3O2D0YVnYMtzb0WXspl18l-Tpxtx1LZnpafIhoesQGhw&oe=69D745BB')" }}
             >
-              <div className="absolute inset-0 bg-gradient-to-b from-blue-900/50 to-blue-800/40"></div>
+              <div className="absolute inset-0 bg-gradient-to-b from-black-900/50 to-black-800/40"></div>
               <div className="relative z-10 text-white">
                 <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight leading-tight">Tham Quan Công Trường</h2>
                 <div className="h-1 w-12 bg-blue-400 mx-auto my-3 rounded-full"></div>
