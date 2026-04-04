@@ -25,10 +25,9 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'the-win-city-booking
 
 // ==========================================
 // 2. TÀI KHOẢN GỐC (SUPER ADMIN)
-// Email này có quyền tối cao, không thể bị xóa khỏi hệ thống
 // ==========================================
 const SUPER_ADMIN_EMAILS = [
-  'minhstar8x@gmail.com' 
+  'minhpv@thangloigroup.vn' // Thay Gmail của bạn vào đây
 ];
 
 export default function App() {
