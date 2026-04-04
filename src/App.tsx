@@ -363,7 +363,7 @@ export default function App() {
               <div className="relative z-10 flex flex-col items-center">
                 {/* Logo dự án */}
                 <img 
-                  src="https://placehold.co/180x60/ffffff/004aad?text=YOUR+LOGO" 
+                  src="https://thewincity.vn/wp-content/uploads/2025/11/header-logo.svg" 
                   alt="Logo The Win City" 
                   className="h-14 object-contain mb-4 rounded-md shadow-sm bg-white p-1.5"
                 />
