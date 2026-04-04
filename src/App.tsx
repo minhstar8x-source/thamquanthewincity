@@ -361,12 +361,7 @@ export default function App() {
               <div className="absolute inset-0 bg-blue-900/75"></div>
               
               <div className="relative z-10 flex flex-col items-center">
-                {/* Logo dự án */}
-                <img 
-                  src="https://thewincity.vn/wp-content/uploads/2025/11/header-logo.svg" 
-                  alt="Logo The Win City" 
-                  className="h-14 object-contain mb-4 rounded-md shadow-sm bg-white p-1.5"
-                />
+                
                 <h2 className="text-xl sm:text-2xl font-bold text-white mb-2 drop-shadow-md">ĐĂNG KÝ THAM QUAN<br/>CÔNG TRƯỜNG THE WIN CITY</h2>
                 <p className="text-blue-50 text-sm mt-2 drop-shadow">Vui lòng chọn ngày và khung giờ phù hợp</p>
               </div>
