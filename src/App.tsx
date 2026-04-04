@@ -30,6 +30,16 @@ const SUPER_ADMIN_EMAILS = [
   'minhpv@thangloigroup.vn' // Thay Gmail của bạn vào đây
 ];
 
+// Hàm bổ trợ lấy ngày định dạng YYYY-MM-DD theo múi giờ Việt Nam
+const getVietnamDateString = () => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+};
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -37,8 +47,8 @@ export default function App() {
   const [adminsList, setAdminsList] = useState([]); 
   const [view, setView] = useState('form'); 
   
-  // Lấy ngày hiện tại định dạng YYYY-MM-DD
-  const today = new Date().toISOString().split('T')[0];
+  // Lấy ngày hiện tại theo múi giờ Việt Nam
+  const today = useMemo(() => getVietnamDateString(), []);
   
   const [selectedDate, setSelectedDate] = useState(today);
   const [name, setName] = useState('');
@@ -74,13 +84,13 @@ export default function App() {
     const unsubReg = onSnapshot(regPath, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setRegistrations(data);
-    });
+    }, (error) => console.error("Lỗi tải đăng ký:", error));
 
     const adminPath = collection(db, 'artifacts', appId, 'public', 'data', 'admins');
     const unsubAdmin = onSnapshot(adminPath, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setAdminsList(data);
-    });
+    }, (error) => console.error("Lỗi tải admin:", error));
 
     return () => { unsubReg(); unsubAdmin(); };
   }, [user]);
@@ -167,7 +177,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 font-sans selection:bg-blue-100 overflow-x-hidden">
-      {/* Navbar Gọn gàng */}
+      {/* Navbar */}
       <nav className="bg-white shadow-md sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-4 flex justify-between h-14 items-center">
           <div className="flex items-center font-bold text-lg text-blue-700 truncate mr-2">
@@ -185,7 +195,6 @@ export default function App() {
       <main className="max-w-5xl mx-auto p-4 pb-12">
         {view === 'form' && (
           <div className="max-w-xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
-            {/* Tiêu đề không có Logo */}
             <div 
               className="relative px-6 py-12 text-center bg-cover bg-center"
               style={{ backgroundImage: "url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop')" }}
@@ -206,22 +215,18 @@ export default function App() {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-5">
-                {/* Chọn Ngày - Đã fix mobile */}
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">1. Chọn ngày tham quan</label>
-                  <div className="relative">
-                     <input 
-                      type="date" 
-                      min={today} // Chặn ngày quá khứ
-                      value={selectedDate} 
-                      onChange={(e) => setSelectedDate(e.target.value)} 
-                      className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm appearance-none" 
-                      required 
-                    />
-                  </div>
+                  <input 
+                    type="date" 
+                    min={today} 
+                    value={selectedDate} 
+                    onChange={(e) => setSelectedDate(e.target.value)} 
+                    className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm" 
+                    required 
+                  />
                 </div>
 
-                {/* Chọn Giờ - Đã tối ưu 3 cột */}
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">2. Chọn khung giờ</label>
                   <div className="grid grid-cols-3 gap-2">
@@ -252,7 +257,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Thông tin khách hàng */}
                 <div className="space-y-3 pt-2">
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">3. Thông tin cá nhân</label>
                   <div className="space-y-3">
@@ -265,7 +269,7 @@ export default function App() {
                 <button 
                   type="submit" 
                   disabled={submitStatus.loading || !selectedSlot} 
-                  className="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white py-4 rounded-2xl font-bold shadow-xl shadow-blue-200 transition-all disabled:opacity-50 disabled:active:scale-100"
+                  className="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white py-4 rounded-2xl font-bold shadow-xl shadow-blue-200 transition-all disabled:opacity-50"
                 >
                   {submitStatus.loading ? "ĐANG GỬI..." : "XÁC NHẬN ĐĂNG KÝ"}
                 </button>
@@ -274,7 +278,6 @@ export default function App() {
           </div>
         )}
 
-        {/* View Admin giữ nguyên các chức năng quản trị */}
         {view === 'admin' && isAdmin && (
           <div className="space-y-4">
              <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
@@ -304,7 +307,7 @@ export default function App() {
                             <td className="p-3 text-gray-600">{reg.phone}</td>
                             <td className="p-3 text-gray-500 italic">{reg.agency}</td>
                             <td className="p-3 text-right">
-                               <button onClick={() => handleDelete(reg.id)} className="text-gray-300 hover:text-red-500"><Trash2 className="h-4 w-4"/></button>
+                               <button onClick={() => handleDelete(reg.id)} className="text-gray-400 hover:text-red-500"><Trash2 className="h-4 w-4"/></button>
                             </td>
                           </tr>
                         ))
@@ -313,7 +316,7 @@ export default function App() {
                   </table>
                 </div>
              </div>
-             {/* Phần cấp quyền admin động */}
+             
              <div className="bg-white p-5 rounded-3xl shadow-xl border border-gray-100">
                 <h3 className="font-bold flex items-center text-gray-800 mb-4"><Shield className="mr-2 h-5 w-5 text-indigo-500"/> Cấp quyền Admin mới</h3>
                 <form onSubmit={async (e) => {
