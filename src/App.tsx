@@ -191,6 +191,27 @@ export default function App() {
     return counts;
   }, [todayRegistrations]);
 
+  // Lọc chỉ giữ lại các khung giờ khả dụng (chưa qua) cho hôm nay
+  const availableSlots = useMemo(() => {
+    const isToday = selectedDate === today;
+    const now = new Date();
+    const currentTimeInMinutes = now.getHours() * 60 + now.getMinutes();
+
+    return SLOTS.filter(slot => {
+      if (!isToday) return true; // Các ngày tương lai đều khả dụng
+      const [slotHour, slotMinute] = slot.split(':').map(Number);
+      const slotTimeInMinutes = slotHour * 60 + slotMinute;
+      return slotTimeInMinutes > currentTimeInMinutes;
+    });
+  }, [selectedDate, today]);
+
+  // Reset selectedSlot nếu khung giờ đã chọn không còn khả dụng
+  useEffect(() => {
+    if (selectedSlot && !availableSlots.includes(selectedSlot)) {
+      setSelectedSlot('');
+    }
+  }, [availableSlots, selectedSlot]);
+
   // Logic Biểu đồ
   const chartData = useMemo(() => {
     if (chartType === 'day') {
@@ -389,9 +410,9 @@ export default function App() {
               className="relative px-6 py-12 text-center bg-cover bg-center"
               style={{ backgroundImage: "url('https://scontent.fsgn22-1.fna.fbcdn.net/v/t39.30808-6/660431692_122180502596789445_5003665343564458581_n.jpg?_nc_cat=107&ccb=1-7&_nc_sid=2a1932&_nc_ohc=jHjZgb04H28Q7kNvwH2hVPa&_nc_oc=AdoCgaIW2wuSOFyFC2M_KDfBiMK3woHbmlzmTOpXqYuF0nT6oMKa7a9-cFTwI_IKvto&_nc_zt=23&_nc_ht=scontent.fsgn22-1.fna&_nc_gid=tYYixgtD1TRQzDBPTgvrWA&_nc_ss=7a3a8&oh=00_Af3O2D0YVnYMtzb0WXspl18l-Tpxtx1LZnpafIhoesQGhw&oe=69D745BB')" }}
             >
-              <div className="absolute inset-0 bg-gradient-to-b from-orange-900/90 to-orange-800/80"></div>
+              <div className="absolute inset-0 bg-gradient-to-b from-orange-900/60 to-orange-800/40"></div>
               <div className="relative z-10 text-white">
-                <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight leading-tight">ĐĂNG KÝ THAM QUAN CÔNG TRƯỜNG</h2>
+                <h2 className="text-xl sm:text-2xl font-black text-white uppercase tracking-tight leading-tight">ĐĂNG KÝ THAM QUAN CÔNG TRƯỜNG</h2>
                 <div className="h-1 w-12 bg-orange-400 mx-auto my-3 rounded-full"></div>
                 <p className="text-xs sm:text-sm text-orange-100 font-medium italic">Vui lòng điền đầy đủ thông tin để chúng tôi đón tiếp chu đáo</p>
               </div>
@@ -406,7 +427,7 @@ export default function App() {
 
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">1. Chọn ngày tham quan</label>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">Chọn ngày tham quan</label>
                   <div className="relative">
                     <div className="w-full px-4 py-3 border-2 border-gray-100 rounded-2xl bg-gray-50 text-gray-700 text-sm font-medium flex justify-between items-center pointer-events-none">
                       <span>{selectedDate.split('-').reverse().join('/')}</span>
@@ -425,26 +446,33 @@ export default function App() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">2. Chọn khung giờ</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {SLOTS.map(slot => {
-                      const isFull = slotCounts[slot] >= MAX_PER_SLOT;
-                      const isSelected = selectedSlot === slot;
-                      return (
-                        <button 
-                          key={slot} type="button" disabled={isFull} onClick={() => setSelectedSlot(slot)} 
-                          className={`py-3 px-1 text-xs font-bold rounded-xl border-2 transition-all flex flex-col items-center justify-center ${isFull ? 'bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed' : isSelected ? 'bg-orange-600 border-orange-600 text-white shadow-lg shadow-orange-200 scale-105' : 'bg-white border-gray-100 text-gray-600 hover:border-orange-200'}`}
-                        >
-                          <span>{slot}</span>
-                          <span className={`text-[9px] mt-1 font-normal ${isSelected ? 'text-orange-100' : 'text-gray-400'}`}>{isFull ? 'Kín' : `Còn ${MAX_PER_SLOT - slotCounts[slot]}`}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">Chọn khung giờ</label>
+                  
+                  {availableSlots.length === 0 ? (
+                    <div className="w-full py-4 px-3 text-center text-sm font-medium text-gray-500 bg-gray-50 border border-dashed border-gray-200 rounded-2xl">
+                      Đã hết khung giờ khả dụng cho hôm nay.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2">
+                      {availableSlots.map(slot => {
+                        const isFull = slotCounts[slot] >= MAX_PER_SLOT;
+                        const isSelected = selectedSlot === slot;
+                        return (
+                          <button 
+                            key={slot} type="button" disabled={isFull} onClick={() => setSelectedSlot(slot)} 
+                            className={`py-3 px-1 text-xs font-bold rounded-xl border-2 transition-all flex flex-col items-center justify-center ${isFull ? 'bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed' : isSelected ? 'bg-orange-600 border-orange-600 text-white shadow-lg shadow-orange-200 scale-105' : 'bg-white border-gray-100 text-gray-600 hover:border-orange-200'}`}
+                          >
+                            <span>{slot}</span>
+                            <span className={`text-[9px] mt-1 font-normal ${isSelected ? 'text-orange-100' : 'text-gray-400'}`}>{isFull ? 'Kín' : `Còn ${MAX_PER_SLOT - slotCounts[slot]}`}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-3 pt-2">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">3. Thông tin cá nhân</label>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">Thông tin đăng ký</label>
                   <div className="space-y-3">
                     <input type="text" placeholder="Họ và tên của bạn" value={name} onChange={(e) => setName(e.target.value)} className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-orange-500 focus:bg-white outline-none transition-all text-sm" required />
                     <input type="tel" placeholder="Số điện thoại" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-orange-500 focus:bg-white outline-none transition-all text-sm" required />
