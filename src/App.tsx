@@ -30,7 +30,7 @@ const SUPER_ADMIN_EMAILS = [
   'minhpv@thangloigroup.vn' // Thay Gmail của bạn vào đây
 ];
 
-// Lấy ngày định dạng YYYY-MM-DD theo múi giờ Việt Nam
+// Lấy ngày hiện tại theo giờ VN
 const getVietnamDateString = () => {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Ho_Chi_Minh',
@@ -40,9 +40,21 @@ const getVietnamDateString = () => {
   }).format(new Date());
 };
 
+// Hàm hỗ trợ: Chuyển chuỗi "YYYY-MM-DD" thành Date nội bộ an toàn (tránh lệch múi giờ)
+const parseDateSafe = (dStr) => {
+  const [y, m, d] = dStr.split('-');
+  return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+};
+
+// Hàm hỗ trợ: Định dạng lại Date thành "YYYY-MM-DD"
+const formatDateSafe = (date) => {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false); // Phân quyền cấp 2
   const [registrations, setRegistrations] = useState([]);
   const [adminsList, setAdminsList] = useState([]); 
   const [view, setView] = useState('form'); 
@@ -58,15 +70,16 @@ export default function App() {
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [sessionStartTime, setSessionStartTime] = useState(null);
+  
+  // Trạng thái Biểu đồ
+  const [chartType, setChartType] = useState('day'); // 'day', 'week', 'month'
 
-  // Trạng thái Hộp thoại (Modal) thay cho alert/confirm
   const [modal, setModal] = useState({ isOpen: false, type: 'alert', title: '', message: '', onConfirm: null });
 
   const showAlert = (title, message) => setModal({ isOpen: true, type: 'alert', title, message, onConfirm: null });
   const showConfirm = (title, message, onConfirm) => setModal({ isOpen: true, type: 'confirm', title, message, onConfirm });
   const closeModal = () => setModal({ ...modal, isOpen: false });
 
-  // Kiểm tra biểu mẫu đã điền đủ chưa
   const isFormValid = name.trim() !== '' && phone.trim() !== '' && agency.trim() !== '' && selectedSlot !== '';
 
   // Khởi tạo Auth
@@ -108,16 +121,18 @@ export default function App() {
     return () => { unsubReg(); unsubAdmin(); };
   }, [user]);
 
-  // Kiểm tra quyền Admin & Cấp Session
+  // Kiểm tra phân quyền đa cấp & Cấp Session
   useEffect(() => {
     if (user?.email) {
       const isSuper = SUPER_ADMIN_EMAILS.includes(user.email);
       const isDynamicAdmin = adminsList.some(a => a.email === user.email);
       const hasAdminRights = isSuper || isDynamicAdmin;
       
+      setIsSuperAdmin(isSuper);
       setIsAdmin(hasAdminRights);
       if (hasAdminRights) setSessionStartTime(prev => prev || Date.now());
     } else {
+      setIsSuperAdmin(false);
       setIsAdmin(false);
       setSessionStartTime(null);
     }
@@ -135,12 +150,11 @@ export default function App() {
       };
 
       checkSession();
-      const interval = setInterval(checkSession, 60000); // Kiểm tra mỗi phút
+      const interval = setInterval(checkSession, 60000); 
       return () => clearInterval(interval);
     }
   }, [isAdmin, sessionStartTime]);
 
-  // Đảm bảo không bị kẹt ở màn hình admin nếu mất quyền
   useEffect(() => {
     if (view === 'admin' && !isAdmin) {
       setView('form');
@@ -163,13 +177,55 @@ export default function App() {
     return counts;
   }, [todayRegistrations]);
 
-  // ==========================================
-  // XỬ LÝ ĐĂNG NHẬP (ĐÃ NÂNG CẤP CHUYỂN TRANG TỰ ĐỘNG)
-  // ==========================================
+  // Logic Xử lý Dữ liệu Biểu đồ (Ngày / Tuần / Tháng)
+  const chartData = useMemo(() => {
+    if (chartType === 'day') {
+      return SLOTS.map(slot => ({
+        label: slot,
+        count: registrations.filter(r => r.date === selectedDate && r.slot === slot).length,
+        max: Math.max(MAX_PER_SLOT, ...SLOTS.map(s => registrations.filter(r => r.date === selectedDate && r.slot === s).length)) || MAX_PER_SLOT
+      }));
+    } else if (chartType === 'week') {
+      const curr = parseDateSafe(selectedDate);
+      let dayOfWeek = curr.getDay(); // 0 là CN, 1 là T2
+      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      curr.setDate(curr.getDate() + diffToMonday); // Lui về Thứ 2 của tuần đó
+      
+      const days = [];
+      const labels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(curr);
+        d.setDate(curr.getDate() + i);
+        const dString = formatDateSafe(d);
+        days.push({
+          label: labels[i],
+          count: registrations.filter(r => r.date === dString).length,
+        });
+      }
+      const maxVal = Math.max(...days.map(d => d.count), 10); // Lấy cột cao nhất làm chuẩn
+      return days.map(d => ({ ...d, max: maxVal }));
+    } else if (chartType === 'month') {
+      const curr = parseDateSafe(selectedDate);
+      const year = curr.getFullYear();
+      const month = curr.getMonth();
+      const numDays = new Date(year, month + 1, 0).getDate(); // Số ngày trong tháng
+      const days = [];
+      for (let i = 1; i <= numDays; i++) {
+        const dString = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+        days.push({
+          label: String(i),
+          count: registrations.filter(r => r.date === dString).length,
+        });
+      }
+      const maxVal = Math.max(...days.map(d => d.count), 10);
+      return days.map(d => ({ ...d, max: maxVal }));
+    }
+    return [];
+  }, [chartType, selectedDate, registrations]);
+
+  // Đăng nhập Admin
   const handleAdminLogin = async () => {
     if (isLoggingIn) return;
-
-    // 1. Kiểm tra môi trường xem trước (iframe)
     try {
       if (window.self !== window.top) {
         showAlert(
@@ -178,9 +234,7 @@ export default function App() {
         );
         return;
       }
-    } catch (e) {
-      // Bỏ qua lỗi cross-origin nếu có
-    }
+    } catch (e) { }
 
     setIsLoggingIn(true);
     const provider = new GoogleAuthProvider();
@@ -190,47 +244,29 @@ export default function App() {
       const result = await signInWithPopup(auth, provider);
       localStorage.setItem('adminLoginTime', Date.now().toString());
       
-      // Kiểm tra quyền ngay sau khi đăng nhập thành công
       const email = result.user.email;
       const isSuper = SUPER_ADMIN_EMAILS.includes(email);
       const isDynamicAdmin = adminsList.some(a => a.email === email);
       
       if (isSuper || isDynamicAdmin) {
-        // Nếu có quyền -> Tự động chuyển thẳng sang trang quản trị
         setView('admin');
       } else {
-        // Nếu không có quyền -> Báo lỗi và tự động văng ra
         showAlert(
           "Không có quyền truy cập", 
-          `Tài khoản "${email}" chưa được phân quyền quản trị.\n\nNếu bạn là nhân viên, vui lòng liên hệ Quản trị viên để được cấp quyền.`
+          `Tài khoản "${email}" chưa được phân quyền quản trị.\n\nNếu bạn là nhân viên, vui lòng liên hệ Quản trị viên gốc để được cấp quyền.`
         );
         handleAdminLogout();
       }
-
     } catch (error) {
-      console.error("Lỗi đăng nhập Firebase:", error);
-      
       if (error.code === 'auth/unauthorized-domain') {
         const currentDomain = window.location.hostname;
-        showAlert(
-          'Lỗi Tên Miền Chưa Cấp Phép', 
-          `Tên miền "${currentDomain}" đang bị Firebase chặn đăng nhập.\n\nĐể sửa lỗi:\n1. Mở Firebase Console -> Authentication -> Settings -> Authorized domains.\n2. Thêm "${currentDomain}" vào danh sách.\n3. Lưu lại và thử đăng nhập lại.`
-        );
+        showAlert('Lỗi Tên Miền Chưa Cấp Phép', `Tên miền "${currentDomain}" đang bị Firebase chặn đăng nhập.\n\nĐể sửa lỗi:\n1. Mở Firebase Console -> Authentication -> Settings -> Authorized domains.\n2. Thêm "${currentDomain}" vào danh sách.\n3. Lưu lại và thử đăng nhập lại.`);
       } else if (error.code === 'auth/operation-not-allowed') {
-        showAlert(
-          'Chưa Bật Đăng Nhập Bằng Google',
-          'Bạn chưa kích hoạt phương thức đăng nhập này trên Firebase.\n\n👉 Cách sửa lỗi:\n1. Mở Firebase Console -> Authentication -> Sign-in method.\n2. Bấm "Add new provider" -> Chọn Google.\n3. Bật "Enable" (Cho phép).\n4. RẤT QUAN TRỌNG: Chọn "Project support email" (Email hỗ trợ dự án) rồi bấm Lưu (Save).'
-        );
+        showAlert('Chưa Bật Đăng Nhập Bằng Google', 'Bạn chưa kích hoạt phương thức đăng nhập này trên Firebase.\n\n👉 Cách sửa lỗi:\n1. Mở Firebase Console -> Authentication -> Sign-in method.\n2. Bấm "Add new provider" -> Chọn Google.\n3. Bật "Enable" (Cho phép).\n4. RẤT QUAN TRỌNG: Chọn "Project support email" (Email hỗ trợ dự án) rồi bấm Lưu (Save).');
       } else if (error.code === 'auth/popup-blocked') {
-        showAlert(
-          'Trình duyệt chặn Pop-up',
-          'Trình duyệt của bạn đang chặn cửa sổ đăng nhập. Vui lòng nhìn lên thanh địa chỉ (góc trên bên phải), bấm vào biểu tượng cảnh báo và chọn "Luôn cho phép cửa sổ bật lên" (Always allow pop-ups) cho trang web này.'
-        );
+        showAlert('Trình duyệt chặn Pop-up', 'Trình duyệt của bạn đang chặn cửa sổ đăng nhập. Vui lòng nhìn lên thanh địa chỉ (góc trên bên phải), bấm vào biểu tượng cảnh báo và chọn "Luôn cho phép cửa sổ bật lên" (Always allow pop-ups) cho trang web này.');
       } else if (error.code !== 'auth/popup-closed-by-user') {
-        showAlert(
-          'Lỗi Đăng Nhập', 
-          `Hệ thống báo lỗi: ${error.message}\n\n👉 GỢI Ý SỬA LỖI:\n1. Kiểm tra đã BẬT Đăng nhập Google trong Firebase chưa.\n2. Đảm bảo đã thiết lập "Support Email" trong mục cài đặt Firebase.\n3. Đảm bảo tên miền web đã được cấp phép trong phần "Authorized domains".`
-        );
+        showAlert('Lỗi Đăng Nhập', `Hệ thống báo lỗi: ${error.message}`);
       }
     } finally {
       setIsLoggingIn(false);
@@ -248,10 +284,8 @@ export default function App() {
     setView('form');
   };
 
-  // Xuất file Excel (CSV)
   const exportToExcel = () => {
     const headers = ['Giờ', 'Họ Tên', 'Số Điện Thoại', 'Đại Lý', 'Ngày Đăng Ký'];
-    // Đã FIX lỗi sort làm hỏng dữ liệu gốc gây trắng màn hình (thêm [...])
     const rows = [...todayRegistrations]
       .sort((a,b) => a.slot.localeCompare(b.slot))
       .map(reg => [
@@ -274,7 +308,6 @@ export default function App() {
     document.body.removeChild(link);
   };
 
-  // Submit Form
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!user || !isFormValid) return;
@@ -299,7 +332,7 @@ export default function App() {
   };
 
   const handleDelete = (id) => {
-    if (!isAdmin) return;
+    if (!isSuperAdmin) return;
     showConfirm("Xác nhận xóa", "Bạn có chắc chắn muốn xóa lượt đăng ký này không?", async () => {
       try {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'registrations', id));
@@ -312,7 +345,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 font-sans selection:bg-orange-100 overflow-x-hidden">
       
-      {/* --- HỘP THOẠI MODAL --- */}
+      {/* MODAL */}
       {modal.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 animate-in zoom-in-95 duration-200">
@@ -337,7 +370,6 @@ export default function App() {
           </div>
         </div>
       )}
-      {/* ----------------------------------------------- */}
 
       {/* Navbar */}
       <nav className="bg-white shadow-md sticky top-0 z-50">
@@ -456,7 +488,21 @@ export default function App() {
                 <div className="bg-gray-900 p-4 flex flex-col sm:flex-row justify-between items-center gap-3">
                   <h2 className="text-white font-bold flex items-center"><LayoutDashboard className="mr-2 h-5 w-5"/> Bảng Thống Kê</h2>
                   <div className="flex gap-2 w-full sm:w-auto">
-                    <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-gray-800 text-white text-xs p-2.5 rounded-lg border-none focus:ring-1 focus:ring-orange-500 outline-none flex-1" />
+                    
+                    {/* TRÁNG GƯƠNG NGÀY CHO ADMIN: HIỂN THỊ DD/MM/YYYY NHƯNG GIỮ NGUYÊN CHỨC NĂNG CHỌN NGÀY */}
+                    <div className="relative flex-1 sm:w-40">
+                      <div className="w-full px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs font-medium flex justify-between items-center pointer-events-none">
+                        <span>{selectedDate.split('-').reverse().join('/')}</span>
+                        <Calendar className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <input 
+                        type="date" 
+                        value={selectedDate} 
+                        onChange={(e) => setSelectedDate(e.target.value)} 
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer block box-border" 
+                      />
+                    </div>
+                    
                     <button onClick={exportToExcel} className="bg-green-600 hover:bg-green-500 text-white px-3 py-2 rounded-lg flex items-center justify-center text-xs font-bold transition-colors shadow-sm">
                       <Download className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Xuất Excel</span>
                     </button>
@@ -464,23 +510,34 @@ export default function App() {
                 </div>
                 
                 <div className="p-5 border-b border-gray-100 bg-gray-50/50">
-                  <h3 className="text-xs font-bold text-gray-500 uppercase flex items-center mb-4">
-                    <BarChart3 className="h-4 w-4 mr-1.5" /> Sơ đồ lượng khách theo ca
-                  </h3>
-                  <div className="flex items-end gap-2 h-32 px-2">
-                    {SLOTS.map(slot => {
-                      const count = slotCounts[slot];
-                      const heightPercent = MAX_PER_SLOT > 0 ? (count / MAX_PER_SLOT) * 100 : 0;
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+                    <h3 className="text-xs font-bold text-gray-500 uppercase flex items-center">
+                      <BarChart3 className="h-4 w-4 mr-1.5" /> Biểu đồ lượng khách
+                    </h3>
+                    
+                    {/* BỘ LỌC BIỂU ĐỒ: NGÀY/TUẦN/THÁNG */}
+                    <div className="flex bg-gray-200 p-0.5 rounded-lg w-full sm:w-auto">
+                      <button onClick={() => setChartType('day')} className={`flex-1 sm:flex-none px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${chartType === 'day' ? 'bg-white shadow text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}>Ngày</button>
+                      <button onClick={() => setChartType('week')} className={`flex-1 sm:flex-none px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${chartType === 'week' ? 'bg-white shadow text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}>Tuần</button>
+                      <button onClick={() => setChartType('month')} className={`flex-1 sm:flex-none px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${chartType === 'month' ? 'bg-white shadow text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}>Tháng</button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-end gap-1 sm:gap-2 h-32 px-1 overflow-x-auto min-w-full pb-2">
+                    {chartData.map((item, idx) => {
+                      const heightPercent = item.max > 0 ? (item.count / item.max) * 100 : 0;
+                      // Đổi màu cột nếu đầy (áp dụng riêng cho biểu đồ Ngày)
+                      const isFullSlot = chartType === 'day' && item.count >= MAX_PER_SLOT;
                       return (
-                        <div key={slot} className="flex-1 flex flex-col items-center justify-end h-full group">
-                          <span className="text-[10px] font-bold text-gray-500 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">{count}</span>
-                          <div className="w-full max-w-[24px] bg-gray-200 rounded-t-md relative flex justify-center items-end" style={{ height: '100%' }}>
+                        <div key={idx} className="flex-1 min-w-[20px] flex flex-col items-center justify-end h-full group">
+                          <span className="text-[10px] font-bold text-gray-500 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">{item.count}</span>
+                          <div className="w-full max-w-[24px] bg-gray-200 rounded-t-sm relative flex justify-center items-end" style={{ height: '100%' }}>
                             <div 
-                              className={`w-full rounded-t-md transition-all duration-700 ${count >= MAX_PER_SLOT ? 'bg-red-500' : 'bg-orange-500'}`} 
+                              className={`w-full rounded-t-sm transition-all duration-700 ${isFullSlot ? 'bg-red-500' : 'bg-orange-500'}`} 
                               style={{ height: `${heightPercent}%` }}
                             ></div>
                           </div>
-                          <span className="text-[9px] text-gray-600 mt-2 font-medium">{slot}</span>
+                          <span className="text-[8px] sm:text-[9px] text-gray-600 mt-1.5 font-medium whitespace-nowrap">{item.label}</span>
                         </div>
                       )
                     })}
@@ -495,23 +552,27 @@ export default function App() {
                         <th className="p-4 font-medium uppercase text-[10px]">Tên</th>
                         <th className="p-4 font-medium uppercase text-[10px]">SĐT</th>
                         <th className="p-4 font-medium uppercase text-[10px]">Đại lý</th>
-                        <th className="p-4 text-right"></th>
+                        {/* ẨN cột XÓA nếu là nhân viên bình thường */}
+                        {isSuperAdmin && <th className="p-4 text-right uppercase text-[10px]">Xóa</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {todayRegistrations.length === 0 ? (
-                        <tr><td colSpan="5" className="p-10 text-center text-gray-400">Không có đăng ký nào trong ngày này</td></tr>
+                        <tr><td colSpan={isSuperAdmin ? "5" : "4"} className="p-10 text-center text-gray-400">Không có đăng ký nào trong ngày này</td></tr>
                       ) : (
-                        // Đã FIX lỗi sort làm hỏng dữ liệu gốc gây trắng màn hình (thêm [...])
                         [...todayRegistrations].sort((a,b) => a.slot.localeCompare(b.slot)).map(reg => (
                           <tr key={reg.id} className="hover:bg-orange-50/50 transition-colors">
                             <td className="p-4 font-bold text-orange-600">{reg.slot}</td>
                             <td className="p-4 font-medium text-gray-800">{reg.name}</td>
                             <td className="p-4 text-gray-600">{reg.phone}</td>
                             <td className="p-4 text-gray-500 italic">{reg.agency}</td>
-                            <td className="p-4 text-right">
-                               <button onClick={() => handleDelete(reg.id)} className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 className="h-4 w-4"/></button>
-                            </td>
+                            
+                            {/* CHỈ SUPER ADMIN MỚI THẤY NÚT XÓA */}
+                            {isSuperAdmin && (
+                              <td className="p-4 text-right">
+                                <button onClick={() => handleDelete(reg.id)} className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 className="h-4 w-4"/></button>
+                              </td>
+                            )}
                           </tr>
                         ))
                       )}
@@ -520,32 +581,37 @@ export default function App() {
                 </div>
              </div>
              
-             <div className="bg-white p-6 rounded-3xl shadow-xl border border-gray-100">
-                <h3 className="font-bold flex items-center text-gray-800 mb-4"><Shield className="mr-2 h-5 w-5 text-indigo-500"/> Quản lý Admin</h3>
-                <form onSubmit={async (e) => {
-                  e.preventDefault();
-                  if(!newAdminEmail.trim()) return;
-                  const adminPath = collection(db, 'artifacts', appId, 'public', 'data', 'admins');
-                  await addDoc(adminPath, { email: newAdminEmail.trim().toLowerCase(), timestamp: serverTimestamp() });
-                  setNewAdminEmail('');
-                  showAlert("Thành công", "Đã cấp quyền quản trị thành công!");
-                }} className="flex gap-2">
-                  <input type="email" placeholder="Gmail nhân viên..." value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} className="flex-1 p-3.5 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-indigo-400 text-sm" required />
-                  <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3.5 rounded-2xl text-sm font-bold shadow-md shadow-indigo-200 transition-colors">THÊM</button>
-                </form>
-                <div className="mt-5 space-y-2">
-                  {adminsList.map(ad => (
-                    <div key={ad.id} className="flex justify-between items-center p-3.5 bg-gray-50 rounded-2xl border border-gray-100">
-                      <span className="text-sm font-medium text-gray-700">{ad.email}</span>
-                      <button onClick={() => {
-                         showConfirm("Thu hồi quyền", `Bạn muốn thu hồi quyền của ${ad.email}?`, async () => {
-                            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'admins', ad.id));
-                         });
-                      }} className="text-red-400 hover:text-red-600 text-xs font-bold transition-colors">XÓA</button>
-                    </div>
-                  ))}
-                </div>
-             </div>
+             {/* CHỈ SUPER ADMIN MỚI ĐƯỢC XEM/SỬA PHẦN PHÂN QUYỀN NÀY */}
+             {isSuperAdmin && (
+               <div className="bg-white p-6 rounded-3xl shadow-xl border border-gray-100">
+                  <h3 className="font-bold flex items-center text-gray-800 mb-4">
+                    <Shield className="mr-2 h-5 w-5 text-indigo-500"/> Quản lý Admin (Dành riêng cho bạn)
+                  </h3>
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    if(!newAdminEmail.trim()) return;
+                    const adminPath = collection(db, 'artifacts', appId, 'public', 'data', 'admins');
+                    await addDoc(adminPath, { email: newAdminEmail.trim().toLowerCase(), timestamp: serverTimestamp() });
+                    setNewAdminEmail('');
+                    showAlert("Thành công", "Đã cấp quyền quản trị thành công!");
+                  }} className="flex gap-2">
+                    <input type="email" placeholder="Gmail nhân viên..." value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} className="flex-1 p-3.5 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-indigo-400 text-sm" required />
+                    <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3.5 rounded-2xl text-sm font-bold shadow-md shadow-indigo-200 transition-colors">THÊM</button>
+                  </form>
+                  <div className="mt-5 space-y-2">
+                    {adminsList.map(ad => (
+                      <div key={ad.id} className="flex justify-between items-center p-3.5 bg-gray-50 rounded-2xl border border-gray-100">
+                        <span className="text-sm font-medium text-gray-700">{ad.email}</span>
+                        <button onClick={() => {
+                           showConfirm("Thu hồi quyền", `Bạn muốn thu hồi quyền của ${ad.email}?`, async () => {
+                              await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'admins', ad.id));
+                           });
+                        }} className="text-red-400 hover:text-red-600 text-xs font-bold transition-colors">XÓA</button>
+                      </div>
+                    ))}
+                  </div>
+               </div>
+             )}
           </div>
         )}
       </main>
