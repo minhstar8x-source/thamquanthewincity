@@ -27,7 +27,9 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'the-win-city-booking
 // 2. TÀI KHOẢN GỐC (SUPER ADMIN)
 // ==========================================
 const SUPER_ADMIN_EMAILS = [
-  'minhpv@thangloigroup.vn' // Thay Gmail của bạn vào đây
+  'minhpv@thangloigroup.vn', // Thay Gmail của bạn vào đây
+  'nguyennk@thangloigroup.vn',
+  'lanvt@thangloigroup.vn'
 ];
 
 // Lấy ngày hiện tại theo giờ VN
