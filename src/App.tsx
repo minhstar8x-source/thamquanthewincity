@@ -140,6 +140,13 @@ export default function App() {
     }
   }, [isAdmin, sessionStartTime]);
 
+  // Đảm bảo không bị kẹt ở màn hình admin nếu mất quyền
+  useEffect(() => {
+    if (view === 'admin' && !isAdmin) {
+      setView('form');
+    }
+  }, [view, isAdmin]);
+
   const MAX_PER_SLOT = 10;
   const SLOTS = ['9:00', '9:30', '10:00', '15:00', '15:30', '16:00', '16:30'];
 
@@ -157,7 +164,7 @@ export default function App() {
   }, [todayRegistrations]);
 
   // ==========================================
-  // XỬ LÝ ĐĂNG NHẬP (ĐÃ NÂNG CẤP BẮT LỖI)
+  // XỬ LÝ ĐĂNG NHẬP (ĐÃ NÂNG CẤP CHUYỂN TRANG TỰ ĐỘNG)
   // ==========================================
   const handleAdminLogin = async () => {
     if (isLoggingIn) return;
@@ -177,17 +184,32 @@ export default function App() {
 
     setIsLoggingIn(true);
     const provider = new GoogleAuthProvider();
-    
-    // 2. Ép Google luôn hiển thị bảng chọn tài khoản thay vì bỏ qua
     provider.setCustomParameters({ prompt: 'select_account' });
 
     try {
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
       localStorage.setItem('adminLoginTime', Date.now().toString());
+      
+      // Kiểm tra quyền ngay sau khi đăng nhập thành công
+      const email = result.user.email;
+      const isSuper = SUPER_ADMIN_EMAILS.includes(email);
+      const isDynamicAdmin = adminsList.some(a => a.email === email);
+      
+      if (isSuper || isDynamicAdmin) {
+        // Nếu có quyền -> Tự động chuyển thẳng sang trang quản trị
+        setView('admin');
+      } else {
+        // Nếu không có quyền -> Báo lỗi và tự động văng ra
+        showAlert(
+          "Không có quyền truy cập", 
+          `Tài khoản "${email}" chưa được phân quyền quản trị.\n\nNếu bạn là nhân viên, vui lòng liên hệ Quản trị viên để được cấp quyền.`
+        );
+        handleAdminLogout();
+      }
+
     } catch (error) {
       console.error("Lỗi đăng nhập Firebase:", error);
       
-      // 3. Xử lý các lỗi cụ thể để báo cho người dùng
       if (error.code === 'auth/unauthorized-domain') {
         const currentDomain = window.location.hostname;
         showAlert(
