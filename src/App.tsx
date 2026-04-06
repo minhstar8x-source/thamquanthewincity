@@ -412,7 +412,15 @@ export default function App() {
                       <span>{selectedDate.split('-').reverse().join('/')}</span>
                       <Calendar className="h-5 w-5 text-gray-400" />
                     </div>
-                    <input type="date" min={today} value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer block box-border" required />
+                    <input 
+                      type="date" 
+                      min={today} 
+                      value={selectedDate} 
+                      onChange={(e) => setSelectedDate(e.target.value)} 
+                      onClick={(e) => e.target.showPicker && e.target.showPicker()}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer block box-border z-10" 
+                      required 
+                    />
                   </div>
                 </div>
 
@@ -465,7 +473,13 @@ export default function App() {
                         <Calendar className="h-4 w-4 text-gray-400" />
                       </div>
                       {isSuperAdmin && (
-                        <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer block box-border" />
+                        <input 
+                          type="date" 
+                          value={selectedDate} 
+                          onChange={(e) => setSelectedDate(e.target.value)} 
+                          onClick={(e) => e.target.showPicker && e.target.showPicker()}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer block box-border z-10" 
+                        />
                       )}
                     </div>
                     
