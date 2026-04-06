@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
-import { Calendar, Clock, Users, User, Phone, CheckCircle, AlertCircle, Trash2, LayoutDashboard, ClipboardList, Building, LogIn, LogOut, Shield, ShieldAlert } from 'lucide-react';
+import { Calendar, Clock, Users, User, Phone, CheckCircle, AlertCircle, Trash2, LayoutDashboard, ClipboardList, Building, LogIn, LogOut, Shield, ShieldAlert, Download, BarChart3, X } from 'lucide-react';
 
 // ==========================================
 // 1. CẤU HÌNH FIREBASE CỦA BẠN
@@ -251,7 +251,8 @@ export default function App() {
   // Xuất file Excel (CSV)
   const exportToExcel = () => {
     const headers = ['Giờ', 'Họ Tên', 'Số Điện Thoại', 'Đại Lý', 'Ngày Đăng Ký'];
-    const rows = todayRegistrations
+    // Đã FIX lỗi sort làm hỏng dữ liệu gốc gây trắng màn hình (thêm [...])
+    const rows = [...todayRegistrations]
       .sort((a,b) => a.slot.localeCompare(b.slot))
       .map(reg => [
         reg.slot,
@@ -501,7 +502,8 @@ export default function App() {
                       {todayRegistrations.length === 0 ? (
                         <tr><td colSpan="5" className="p-10 text-center text-gray-400">Không có đăng ký nào trong ngày này</td></tr>
                       ) : (
-                        todayRegistrations.sort((a,b) => a.slot.localeCompare(b.slot)).map(reg => (
+                        // Đã FIX lỗi sort làm hỏng dữ liệu gốc gây trắng màn hình (thêm [...])
+                        [...todayRegistrations].sort((a,b) => a.slot.localeCompare(b.slot)).map(reg => (
                           <tr key={reg.id} className="hover:bg-orange-50/50 transition-colors">
                             <td className="p-4 font-bold text-orange-600">{reg.slot}</td>
                             <td className="p-4 font-medium text-gray-800">{reg.name}</td>
