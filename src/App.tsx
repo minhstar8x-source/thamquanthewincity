@@ -29,6 +29,7 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'the-win-city-booking
 const SUPER_ADMIN_EMAILS = [
   'minhpv@thangloigroup.vn' // Thay Gmail của bạn vào đây
 ];
+
 // Lấy ngày định dạng YYYY-MM-DD theo múi giờ Việt Nam
 const getVietnamDateString = () => {
   return new Intl.DateTimeFormat('en-CA', {
@@ -156,7 +157,7 @@ export default function App() {
   }, [todayRegistrations]);
 
   // ==========================================
-  // XỬ LÝ ĐĂNG NHẬP (ĐÃ NÂNG CẤP)
+  // XỬ LÝ ĐĂNG NHẬP (ĐÃ NÂNG CẤP BẮT LỖI)
   // ==========================================
   const handleAdminLogin = async () => {
     if (isLoggingIn) return;
@@ -193,13 +194,21 @@ export default function App() {
           'Lỗi Tên Miền Chưa Cấp Phép', 
           `Tên miền "${currentDomain}" đang bị Firebase chặn đăng nhập.\n\nĐể sửa lỗi:\n1. Mở Firebase Console -> Authentication -> Settings -> Authorized domains.\n2. Thêm "${currentDomain}" vào danh sách.\n3. Lưu lại và thử đăng nhập lại.`
         );
+      } else if (error.code === 'auth/operation-not-allowed') {
+        showAlert(
+          'Chưa Bật Đăng Nhập Bằng Google',
+          'Bạn chưa kích hoạt phương thức đăng nhập này trên Firebase.\n\n👉 Cách sửa lỗi:\n1. Mở Firebase Console -> Authentication -> Sign-in method.\n2. Bấm "Add new provider" -> Chọn Google.\n3. Bật "Enable" (Cho phép).\n4. RẤT QUAN TRỌNG: Chọn "Project support email" (Email hỗ trợ dự án) rồi bấm Lưu (Save).'
+        );
       } else if (error.code === 'auth/popup-blocked') {
         showAlert(
           'Trình duyệt chặn Pop-up',
           'Trình duyệt của bạn đang chặn cửa sổ đăng nhập. Vui lòng nhìn lên thanh địa chỉ (góc trên bên phải), bấm vào biểu tượng cảnh báo và chọn "Luôn cho phép cửa sổ bật lên" (Always allow pop-ups) cho trang web này.'
         );
       } else if (error.code !== 'auth/popup-closed-by-user') {
-        showAlert('Lỗi Đăng Nhập', `Không thể mở bảng đăng nhập: ${error.message}`);
+        showAlert(
+          'Lỗi Đăng Nhập', 
+          `Hệ thống báo lỗi: ${error.message}\n\n👉 GỢI Ý SỬA LỖI:\n1. Kiểm tra đã BẬT Đăng nhập Google trong Firebase chưa.\n2. Đảm bảo đã thiết lập "Support Email" trong mục cài đặt Firebase.\n3. Đảm bảo tên miền web đã được cấp phép trong phần "Authorized domains".`
+        );
       }
     } finally {
       setIsLoggingIn(false);
@@ -275,10 +284,10 @@ export default function App() {
     });
   };
 
-  if (!user) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div></div>;
+  if (!user) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-600"></div></div>;
 
   return (
-    <div className="min-h-screen bg-gray-100 text-gray-800 font-sans selection:bg-blue-100 overflow-x-hidden">
+    <div className="min-h-screen bg-gray-100 text-gray-800 font-sans selection:bg-orange-100 overflow-x-hidden">
       
       {/* --- HỘP THOẠI MODAL --- */}
       {modal.isOpen && (
@@ -297,7 +306,7 @@ export default function App() {
               )}
               <button 
                 onClick={() => { if (modal.onConfirm) modal.onConfirm(); closeModal(); }}
-                className={`px-5 py-2.5 text-white rounded-xl text-sm font-bold shadow-md transition-colors ${modal.type === 'confirm' ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'}`}
+                className={`px-5 py-2.5 text-white rounded-xl text-sm font-bold shadow-md transition-colors ${modal.type === 'confirm' ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-orange-600 hover:bg-orange-700 shadow-orange-200'}`}
               >
                 {modal.type === 'confirm' ? 'Xác nhận Xóa' : 'Đã hiểu'}
               </button>
@@ -310,13 +319,13 @@ export default function App() {
       {/* Navbar */}
       <nav className="bg-white shadow-md sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-4 flex justify-between h-14 items-center">
-          <div className="flex items-center font-bold text-lg text-blue-700 truncate mr-2">
+          <div className="flex items-center font-bold text-lg text-orange-700 truncate mr-2">
             <Calendar className="mr-2 h-5 w-5 flex-shrink-0"/>
             <span className="truncate">The Win City</span>
           </div>
           <div className="flex space-x-1 sm:space-x-2">
-            <button onClick={() => setView('form')} className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${view === 'form' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}>Đăng ký</button>
-            {isAdmin && <button onClick={() => setView('admin')} className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${view === 'admin' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}>Admin</button>}
+            <button onClick={() => setView('form')} className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${view === 'form' ? 'bg-orange-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}>Đăng ký</button>
+            {isAdmin && <button onClick={() => setView('admin')} className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${view === 'admin' ? 'bg-orange-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}>Admin</button>}
             {isAdmin ? <button onClick={handleAdminLogout} className="text-red-500 px-2 py-1.5 text-xs font-medium hover:bg-red-50 rounded-md">Thoát</button> : <button onClick={handleAdminLogin} disabled={isLoggingIn} className="text-gray-400 px-2 py-1.5 text-xs font-medium hover:bg-gray-100 rounded-md disabled:opacity-50">{isLoggingIn ? "Đang chờ..." : "Quản trị"}</button>}
           </div>
         </div>
@@ -329,11 +338,11 @@ export default function App() {
               className="relative px-6 py-12 text-center bg-cover bg-center"
               style={{ backgroundImage: "url('https://scontent.fsgn22-1.fna.fbcdn.net/v/t39.30808-6/660431692_122180502596789445_5003665343564458581_n.jpg?_nc_cat=107&ccb=1-7&_nc_sid=2a1932&_nc_ohc=jHjZgb04H28Q7kNvwH2hVPa&_nc_oc=AdoCgaIW2wuSOFyFC2M_KDfBiMK3woHbmlzmTOpXqYuF0nT6oMKa7a9-cFTwI_IKvto&_nc_zt=23&_nc_ht=scontent.fsgn22-1.fna&_nc_gid=tYYixgtD1TRQzDBPTgvrWA&_nc_ss=7a3a8&oh=00_Af3O2D0YVnYMtzb0WXspl18l-Tpxtx1LZnpafIhoesQGhw&oe=69D745BB')" }}
             >
-              <div className="absolute inset-0 bg-gradient-to-b from-black/70 to-black/60"></div>
+              <div className="absolute inset-0 bg-gradient-to-b from-orange-900/90 to-orange-800/80"></div>
               <div className="relative z-10 text-white">
-                <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight leading-tight">ĐĂNG KÝ Tham Quan Công Trường</h2>
-                <div className="h-1 w-12 bg-blue-400 mx-auto my-3 rounded-full"></div>
-                <p className="text-xs sm:text-sm text-blue-100 font-medium italic">Quý khách vui lòng đăng ký đầy đủ thông tin để chúng tôi đón tiếp được chu đáo</p>
+                <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight leading-tight">ĐĂNG KÝ THAM QUAN CÔNG TRƯỜNG</h2>
+                <div className="h-1 w-12 bg-orange-400 mx-auto my-3 rounded-full"></div>
+                <p className="text-xs sm:text-sm text-orange-100 font-medium italic">Vui lòng điền đầy đủ thông tin để chúng tôi đón tiếp chu đáo</p>
               </div>
             </div>
 
@@ -379,12 +388,12 @@ export default function App() {
                             isFull 
                               ? 'bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed' 
                               : isSelected 
-                                ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200 scale-105' 
-                                : 'bg-white border-gray-100 text-gray-600 hover:border-blue-200'
+                                ? 'bg-orange-600 border-orange-600 text-white shadow-lg shadow-orange-200 scale-105' 
+                                : 'bg-white border-gray-100 text-gray-600 hover:border-orange-200'
                           }`}
                         >
                           <span>{slot}</span>
-                          <span className={`text-[9px] mt-1 font-normal ${isSelected ? 'text-blue-100' : 'text-gray-400'}`}>
+                          <span className={`text-[9px] mt-1 font-normal ${isSelected ? 'text-orange-100' : 'text-gray-400'}`}>
                             {isFull ? 'Kín' : `Còn ${MAX_PER_SLOT - slotCounts[slot]}`}
                           </span>
                         </button>
@@ -396,9 +405,9 @@ export default function App() {
                 <div className="space-y-3 pt-2">
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">3. Thông tin cá nhân</label>
                   <div className="space-y-3">
-                    <input type="text" placeholder="Họ và tên của bạn" value={name} onChange={(e) => setName(e.target.value)} className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm" required />
-                    <input type="tel" placeholder="Số điện thoại" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm" required />
-                    <input type="text" placeholder="Tên đại lý" value={agency} onChange={(e) => setAgency(e.target.value)} className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm" required />
+                    <input type="text" placeholder="Họ và tên của bạn" value={name} onChange={(e) => setName(e.target.value)} className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-orange-500 focus:bg-white outline-none transition-all text-sm" required />
+                    <input type="tel" placeholder="Số điện thoại" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-orange-500 focus:bg-white outline-none transition-all text-sm" required />
+                    <input type="text" placeholder="Tên Đại lý" value={agency} onChange={(e) => setAgency(e.target.value)} className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-orange-500 focus:bg-white outline-none transition-all text-sm" required />
                   </div>
                 </div>
 
@@ -407,7 +416,7 @@ export default function App() {
                   disabled={submitStatus.loading || !isFormValid} 
                   className={`w-full py-4 rounded-2xl font-bold transition-all ${
                     isFormValid && !submitStatus.loading 
-                      ? 'bg-blue-600 hover:bg-blue-700 active:scale-95 text-white shadow-xl shadow-blue-200' 
+                      ? 'bg-orange-600 hover:bg-orange-700 active:scale-95 text-white shadow-xl shadow-orange-200' 
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
                   }`}
                 >
@@ -424,7 +433,7 @@ export default function App() {
                 <div className="bg-gray-900 p-4 flex flex-col sm:flex-row justify-between items-center gap-3">
                   <h2 className="text-white font-bold flex items-center"><LayoutDashboard className="mr-2 h-5 w-5"/> Bảng Thống Kê</h2>
                   <div className="flex gap-2 w-full sm:w-auto">
-                    <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-gray-800 text-white text-xs p-2.5 rounded-lg border-none focus:ring-1 focus:ring-blue-500 outline-none flex-1" />
+                    <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-gray-800 text-white text-xs p-2.5 rounded-lg border-none focus:ring-1 focus:ring-orange-500 outline-none flex-1" />
                     <button onClick={exportToExcel} className="bg-green-600 hover:bg-green-500 text-white px-3 py-2 rounded-lg flex items-center justify-center text-xs font-bold transition-colors shadow-sm">
                       <Download className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Xuất Excel</span>
                     </button>
@@ -444,7 +453,7 @@ export default function App() {
                           <span className="text-[10px] font-bold text-gray-500 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">{count}</span>
                           <div className="w-full max-w-[24px] bg-gray-200 rounded-t-md relative flex justify-center items-end" style={{ height: '100%' }}>
                             <div 
-                              className={`w-full rounded-t-md transition-all duration-700 ${count >= MAX_PER_SLOT ? 'bg-red-500' : 'bg-blue-500'}`} 
+                              className={`w-full rounded-t-md transition-all duration-700 ${count >= MAX_PER_SLOT ? 'bg-red-500' : 'bg-orange-500'}`} 
                               style={{ height: `${heightPercent}%` }}
                             ></div>
                           </div>
@@ -471,8 +480,8 @@ export default function App() {
                         <tr><td colSpan="5" className="p-10 text-center text-gray-400">Không có đăng ký nào trong ngày này</td></tr>
                       ) : (
                         todayRegistrations.sort((a,b) => a.slot.localeCompare(b.slot)).map(reg => (
-                          <tr key={reg.id} className="hover:bg-blue-50/50 transition-colors">
-                            <td className="p-4 font-bold text-blue-600">{reg.slot}</td>
+                          <tr key={reg.id} className="hover:bg-orange-50/50 transition-colors">
+                            <td className="p-4 font-bold text-orange-600">{reg.slot}</td>
                             <td className="p-4 font-medium text-gray-800">{reg.name}</td>
                             <td className="p-4 text-gray-600">{reg.phone}</td>
                             <td className="p-4 text-gray-500 italic">{reg.agency}</td>
