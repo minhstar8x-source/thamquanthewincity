@@ -155,23 +155,51 @@ export default function App() {
     return counts;
   }, [todayRegistrations]);
 
-  // Xử lý Login
+  // ==========================================
+  // XỬ LÝ ĐĂNG NHẬP (ĐÃ NÂNG CẤP)
+  // ==========================================
   const handleAdminLogin = async () => {
     if (isLoggingIn) return;
+
+    // 1. Kiểm tra môi trường xem trước (iframe)
+    try {
+      if (window.self !== window.top) {
+        showAlert(
+          "Cần mở tab mới để đăng nhập",
+          "Bạn đang xem trước trang web trong một khung thu nhỏ. Vì lý do bảo mật, Google chặn không cho hiển thị bảng đăng nhập tại đây.\n\n👉 Vui lòng mở trang web này ở một TAB MỚI (hoặc dùng đường link Vercel chính thức của bạn) để đăng nhập quản trị an toàn."
+        );
+        return;
+      }
+    } catch (e) {
+      // Bỏ qua lỗi cross-origin nếu có
+    }
+
     setIsLoggingIn(true);
     const provider = new GoogleAuthProvider();
+    
+    // 2. Ép Google luôn hiển thị bảng chọn tài khoản thay vì bỏ qua
+    provider.setCustomParameters({ prompt: 'select_account' });
+
     try {
       await signInWithPopup(auth, provider);
+      localStorage.setItem('adminLoginTime', Date.now().toString());
     } catch (error) {
       console.error("Lỗi đăng nhập Firebase:", error);
+      
+      // 3. Xử lý các lỗi cụ thể để báo cho người dùng
       if (error.code === 'auth/unauthorized-domain') {
         const currentDomain = window.location.hostname;
         showAlert(
           'Lỗi Tên Miền Chưa Cấp Phép', 
           `Tên miền "${currentDomain}" đang bị Firebase chặn đăng nhập.\n\nĐể sửa lỗi:\n1. Mở Firebase Console -> Authentication -> Settings -> Authorized domains.\n2. Thêm "${currentDomain}" vào danh sách.\n3. Lưu lại và thử đăng nhập lại.`
         );
+      } else if (error.code === 'auth/popup-blocked') {
+        showAlert(
+          'Trình duyệt chặn Pop-up',
+          'Trình duyệt của bạn đang chặn cửa sổ đăng nhập. Vui lòng nhìn lên thanh địa chỉ (góc trên bên phải), bấm vào biểu tượng cảnh báo và chọn "Luôn cho phép cửa sổ bật lên" (Always allow pop-ups) cho trang web này.'
+        );
       } else if (error.code !== 'auth/popup-closed-by-user') {
-        showAlert('Lỗi', `Đăng nhập thất bại: ${error.message}`);
+        showAlert('Lỗi Đăng Nhập', `Không thể mở bảng đăng nhập: ${error.message}`);
       }
     } finally {
       setIsLoggingIn(false);
@@ -180,6 +208,7 @@ export default function App() {
 
   const handleAdminLogout = async () => {
     await signOut(auth);
+    localStorage.removeItem('adminLoginTime'); 
     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
         await signInWithCustomToken(auth, __initial_auth_token);
     } else {
@@ -251,7 +280,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 font-sans selection:bg-blue-100 overflow-x-hidden">
       
-      {/* --- HỘP THOẠI MODAL (THAY THẾ ALERT/CONFIRM) --- */}
+      {/* --- HỘP THOẠI MODAL --- */}
       {modal.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 animate-in zoom-in-95 duration-200">
@@ -302,9 +331,9 @@ export default function App() {
             >
               <div className="absolute inset-0 bg-gradient-to-b from-black/70 to-black/60"></div>
               <div className="relative z-10 text-white">
-                <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight leading-tight">Tham Quan Công Trường</h2>
+                <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight leading-tight">ĐĂNG KÝ Tham Quan Công Trường</h2>
                 <div className="h-1 w-12 bg-blue-400 mx-auto my-3 rounded-full"></div>
-                <p className="text-xs sm:text-sm text-blue-100 font-medium italic">Vui lòng điền đủ thông tin để hoàn tất đăng ký</p>
+                <p className="text-xs sm:text-sm text-blue-100 font-medium italic">Quý khách vui lòng đăng ký đầy đủ thông tin để chúng tôi đón tiếp được chu đáo</p>
               </div>
             </div>
 
@@ -369,7 +398,7 @@ export default function App() {
                   <div className="space-y-3">
                     <input type="text" placeholder="Họ và tên của bạn" value={name} onChange={(e) => setName(e.target.value)} className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm" required />
                     <input type="tel" placeholder="Số điện thoại" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm" required />
-                    <input type="text" placeholder="Tên đại lý (nếu có)" value={agency} onChange={(e) => setAgency(e.target.value)} className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm" required />
+                    <input type="text" placeholder="Tên đại lý" value={agency} onChange={(e) => setAgency(e.target.value)} className="w-full p-3.5 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm" required />
                   </div>
                 </div>
 
