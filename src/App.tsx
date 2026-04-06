@@ -180,11 +180,12 @@ export default function App() {
   // Logic Xử lý Dữ liệu Biểu đồ (Ngày / Tuần / Tháng)
   const chartData = useMemo(() => {
     if (chartType === 'day') {
-      return SLOTS.map(slot => ({
+      const data = SLOTS.map(slot => ({
         label: slot,
-        count: registrations.filter(r => r.date === selectedDate && r.slot === slot).length,
-        max: Math.max(MAX_PER_SLOT, ...SLOTS.map(s => registrations.filter(r => r.date === selectedDate && r.slot === s).length)) || MAX_PER_SLOT
+        count: registrations.filter(r => r.date === selectedDate && r.slot === slot).length
       }));
+      const maxVal = Math.max(...data.map(d => d.count), 1);
+      return data.map(d => ({ ...d, max: maxVal }));
     } else if (chartType === 'week') {
       const curr = parseDateSafe(selectedDate);
       let dayOfWeek = curr.getDay(); // 0 là CN, 1 là T2
@@ -202,23 +203,36 @@ export default function App() {
           count: registrations.filter(r => r.date === dString).length,
         });
       }
-      const maxVal = Math.max(...days.map(d => d.count), 10); // Lấy cột cao nhất làm chuẩn
+      const maxVal = Math.max(...days.map(d => d.count), 1); // Lấy cột cao nhất làm chuẩn
       return days.map(d => ({ ...d, max: maxVal }));
     } else if (chartType === 'month') {
       const curr = parseDateSafe(selectedDate);
       const year = curr.getFullYear();
       const month = curr.getMonth();
       const numDays = new Date(year, month + 1, 0).getDate(); // Số ngày trong tháng
-      const days = [];
+      
+      const weeks = [
+        { label: 'Tuần 1', count: 0 },
+        { label: 'Tuần 2', count: 0 },
+        { label: 'Tuần 3', count: 0 },
+        { label: 'Tuần 4', count: 0 },
+        { label: 'Tuần 5', count: 0 }
+      ];
+
       for (let i = 1; i <= numDays; i++) {
         const dString = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-        days.push({
-          label: String(i),
-          count: registrations.filter(r => r.date === dString).length,
-        });
+        const countForDay = registrations.filter(r => r.date === dString).length;
+        if (i <= 7) weeks[0].count += countForDay;
+        else if (i <= 14) weeks[1].count += countForDay;
+        else if (i <= 21) weeks[2].count += countForDay;
+        else if (i <= 28) weeks[3].count += countForDay;
+        else weeks[4].count += countForDay;
       }
-      const maxVal = Math.max(...days.map(d => d.count), 10);
-      return days.map(d => ({ ...d, max: maxVal }));
+      
+      if (numDays === 28) weeks.pop(); // Tháng 2 năm không nhuận chỉ có 4 tuần tròn
+
+      const maxVal = Math.max(...weeks.map(w => w.count), 1);
+      return weeks.map(w => ({ ...w, max: maxVal }));
     }
     return [];
   }, [chartType, selectedDate, registrations]);
@@ -509,75 +523,101 @@ export default function App() {
                   </div>
                 </div>
                 
-                <div className="p-5 border-b border-gray-100 bg-gray-50/50">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-                    <h3 className="text-xs font-bold text-gray-500 uppercase flex items-center">
-                      <BarChart3 className="h-4 w-4 mr-1.5" /> Biểu đồ lượng khách
-                    </h3>
-                    
-                    {/* BỘ LỌC BIỂU ĐỒ: NGÀY/TUẦN/THÁNG */}
-                    <div className="flex bg-gray-200 p-0.5 rounded-lg w-full sm:w-auto">
-                      <button onClick={() => setChartType('day')} className={`flex-1 sm:flex-none px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${chartType === 'day' ? 'bg-white shadow text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}>Ngày</button>
-                      <button onClick={() => setChartType('week')} className={`flex-1 sm:flex-none px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${chartType === 'week' ? 'bg-white shadow text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}>Tuần</button>
-                      <button onClick={() => setChartType('month')} className={`flex-1 sm:flex-none px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${chartType === 'month' ? 'bg-white shadow text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}>Tháng</button>
+                {/* CHỈ SUPER ADMIN MỚI THẤY BIỂU ĐỒ NÀY */}
+                {isSuperAdmin && (
+                  <div className="p-5 border-b border-gray-100 bg-gray-50/50">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+                      <h3 className="text-xs font-bold text-gray-500 uppercase flex items-center">
+                        <BarChart3 className="h-4 w-4 mr-1.5" /> Biểu đồ lượng khách
+                      </h3>
+                      
+                      {/* BỘ LỌC BIỂU ĐỒ: NGÀY/TUẦN/THÁNG */}
+                      <div className="flex bg-gray-200 p-0.5 rounded-lg w-full sm:w-auto">
+                        <button onClick={() => setChartType('day')} className={`flex-1 sm:flex-none px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${chartType === 'day' ? 'bg-white shadow text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}>Ngày</button>
+                        <button onClick={() => setChartType('week')} className={`flex-1 sm:flex-none px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${chartType === 'week' ? 'bg-white shadow text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}>Tuần</button>
+                        <button onClick={() => setChartType('month')} className={`flex-1 sm:flex-none px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${chartType === 'month' ? 'bg-white shadow text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}>Tháng</button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-end gap-1 sm:gap-2 h-32 px-1 overflow-x-auto min-w-full pb-2">
+                      {chartData.map((item, idx) => {
+                        const heightPercent = item.max > 0 ? (item.count / item.max) * 100 : 0;
+                        return (
+                          <div key={idx} className="flex-1 min-w-[30px] flex flex-col items-center justify-end h-full">
+                            <span className="text-[10px] font-bold text-orange-600 mb-1">{item.count > 0 ? item.count : '0'}</span>
+                            <div className="w-full max-w-[32px] bg-gray-200 rounded-t-sm relative flex justify-center items-end" style={{ height: '100%' }}>
+                              <div 
+                                className="w-full rounded-t-sm transition-all duration-700 bg-orange-500" 
+                                style={{ height: `${heightPercent}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-[9px] text-gray-600 mt-1.5 font-medium whitespace-nowrap">{item.label}</span>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
+                )}
 
-                  <div className="flex items-end gap-1 sm:gap-2 h-32 px-1 overflow-x-auto min-w-full pb-2">
-                    {chartData.map((item, idx) => {
-                      const heightPercent = item.max > 0 ? (item.count / item.max) * 100 : 0;
-                      // Đổi màu cột nếu đầy (áp dụng riêng cho biểu đồ Ngày)
-                      const isFullSlot = chartType === 'day' && item.count >= MAX_PER_SLOT;
-                      return (
-                        <div key={idx} className="flex-1 min-w-[20px] flex flex-col items-center justify-end h-full group">
-                          <span className="text-[10px] font-bold text-gray-500 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">{item.count}</span>
-                          <div className="w-full max-w-[24px] bg-gray-200 rounded-t-sm relative flex justify-center items-end" style={{ height: '100%' }}>
-                            <div 
-                              className={`w-full rounded-t-sm transition-all duration-700 ${isFullSlot ? 'bg-red-500' : 'bg-orange-500'}`} 
-                              style={{ height: `${heightPercent}%` }}
-                            ></div>
+                {/* DANH SÁCH KHÁCH HÀNG NHÓM THEO KHUNG GIỜ */}
+                <div className="p-4 sm:p-5 bg-white">
+                  <h3 className="text-xs font-bold text-gray-500 uppercase flex items-center mb-4">
+                    <Users className="h-4 w-4 mr-1.5" /> Danh sách khách theo khung giờ
+                  </h3>
+                  
+                  <div className="space-y-4">
+                    {todayRegistrations.length === 0 ? (
+                      <div className="p-10 text-center text-gray-400 border border-dashed border-gray-200 rounded-2xl">
+                        Không có đăng ký nào trong ngày này
+                      </div>
+                    ) : (
+                      SLOTS.map(slot => {
+                        const slotRegs = todayRegistrations.filter(r => r.slot === slot);
+                        if (slotRegs.length === 0) return null; // Ẩn các khung giờ chưa có khách
+                        
+                        return (
+                          <div key={slot} className="border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
+                            <div className="bg-orange-50/50 px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+                              <div className="font-bold text-orange-700 flex items-center">
+                                <Clock className="h-4 w-4 mr-1.5"/> Khung giờ: {slot}
+                              </div>
+                              <span className="text-[10px] font-bold text-orange-600 bg-white px-2 py-1 rounded-lg border border-orange-100 shadow-sm">
+                                {slotRegs.length} / {MAX_PER_SLOT} khách
+                              </span>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left text-sm">
+                                <thead>
+                                  <tr className="bg-white text-gray-400 border-b border-gray-50">
+                                    <th className="p-3 font-medium uppercase text-[10px]">Tên</th>
+                                    <th className="p-3 font-medium uppercase text-[10px]">SĐT</th>
+                                    <th className="p-3 font-medium uppercase text-[10px]">Đại lý</th>
+                                    {isSuperAdmin && <th className="p-3 text-right uppercase text-[10px]">Xóa</th>}
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50 bg-white">
+                                  {slotRegs.map(reg => (
+                                    <tr key={reg.id} className="hover:bg-orange-50/30 transition-colors">
+                                      <td className="p-3 font-medium text-gray-800">{reg.name}</td>
+                                      <td className="p-3 text-gray-600">{reg.phone}</td>
+                                      <td className="p-3 text-gray-500 italic">{reg.agency}</td>
+                                      {isSuperAdmin && (
+                                        <td className="p-3 text-right">
+                                          <button onClick={() => handleDelete(reg.id)} className="text-gray-300 hover:text-red-500 transition-colors">
+                                            <Trash2 className="h-4 w-4"/>
+                                          </button>
+                                        </td>
+                                      )}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
                           </div>
-                          <span className="text-[8px] sm:text-[9px] text-gray-600 mt-1.5 font-medium whitespace-nowrap">{item.label}</span>
-                        </div>
-                      )
-                    })}
+                        );
+                      })
+                    )}
                   </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-white text-gray-500 border-b">
-                        <th className="p-4 font-medium uppercase text-[10px]">Giờ</th>
-                        <th className="p-4 font-medium uppercase text-[10px]">Tên</th>
-                        <th className="p-4 font-medium uppercase text-[10px]">SĐT</th>
-                        <th className="p-4 font-medium uppercase text-[10px]">Đại lý</th>
-                        {/* ẨN cột XÓA nếu là nhân viên bình thường */}
-                        {isSuperAdmin && <th className="p-4 text-right uppercase text-[10px]">Xóa</th>}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {todayRegistrations.length === 0 ? (
-                        <tr><td colSpan={isSuperAdmin ? "5" : "4"} className="p-10 text-center text-gray-400">Không có đăng ký nào trong ngày này</td></tr>
-                      ) : (
-                        [...todayRegistrations].sort((a,b) => a.slot.localeCompare(b.slot)).map(reg => (
-                          <tr key={reg.id} className="hover:bg-orange-50/50 transition-colors">
-                            <td className="p-4 font-bold text-orange-600">{reg.slot}</td>
-                            <td className="p-4 font-medium text-gray-800">{reg.name}</td>
-                            <td className="p-4 text-gray-600">{reg.phone}</td>
-                            <td className="p-4 text-gray-500 italic">{reg.agency}</td>
-                            
-                            {/* CHỈ SUPER ADMIN MỚI THẤY NÚT XÓA */}
-                            {isSuperAdmin && (
-                              <td className="p-4 text-right">
-                                <button onClick={() => handleDelete(reg.id)} className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 className="h-4 w-4"/></button>
-                              </td>
-                            )}
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
                 </div>
              </div>
              
