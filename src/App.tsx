@@ -40,7 +40,7 @@ const getVietnamDateString = () => {
   }).format(new Date());
 };
 
-// Hàm hỗ trợ: Chuyển chuỗi "YYYY-MM-DD" thành Date nội bộ an toàn (tránh lệch múi giờ)
+// Hàm hỗ trợ: Chuyển chuỗi "YYYY-MM-DD" thành Date
 const parseDateSafe = (dStr) => {
   const [y, m, d] = dStr.split('-');
   return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
@@ -54,11 +54,14 @@ const formatDateSafe = (date) => {
 export default function App() {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false); // Phân quyền cấp 2
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [registrations, setRegistrations] = useState([]);
   const [adminsList, setAdminsList] = useState([]); 
-  const [view, setView] = useState('form'); 
   
+  // GHI NHỚ MÀN HÌNH ĐANG XEM (FORM HOẶC ADMIN) ĐỂ KHI F5 KHÔNG BỊ NHẢY TRANG
+  const [view, setView] = useState(() => localStorage.getItem('appView') || 'form'); 
+  useEffect(() => { localStorage.setItem('appView', view); }, [view]);
+
   const today = useMemo(() => getVietnamDateString(), []);
   
   const [selectedDate, setSelectedDate] = useState(today);
@@ -71,9 +74,7 @@ export default function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [sessionStartTime, setSessionStartTime] = useState(null);
   
-  // Trạng thái Biểu đồ
-  const [chartType, setChartType] = useState('day'); // 'day', 'week', 'month'
-
+  const [chartType, setChartType] = useState('day'); 
   const [modal, setModal] = useState({ isOpen: false, type: 'alert', title: '', message: '', onConfirm: null });
 
   const showAlert = (title, message) => setModal({ isOpen: true, type: 'alert', title, message, onConfirm: null });
@@ -82,23 +83,24 @@ export default function App() {
 
   const isFormValid = name.trim() !== '' && phone.trim() !== '' && agency.trim() !== '' && selectedSlot !== '';
 
-  // Khởi tạo Auth
+  // KHỞI TẠO AUTH (ĐÃ SỬA LỖI ĐÁ VĂNG SESSION KHI LOAD LẠI TRANG)
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        // Nếu có tài khoản Google được lưu lại từ trước, giữ nguyên không làm gì cả
+        setUser(currentUser);
+      } else {
+        // Nếu không có bất kỳ ai đăng nhập, mới gọi Đăng nhập Ẩn danh
+        try {
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } else {
+            await signInAnonymously(auth);
+          }
+        } catch (error) {
+          console.error("Lỗi xác thực:", error);
         }
-      } catch (error) {
-        console.error("Lỗi xác thực:", error);
       }
-    };
-    initAuth();
-
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
     });
     return () => unsubscribe();
   }, []);
@@ -121,7 +123,7 @@ export default function App() {
     return () => { unsubReg(); unsubAdmin(); };
   }, [user]);
 
-  // Kiểm tra phân quyền đa cấp & Cấp Session
+  // Kiểm tra quyền & Phục hồi Thời gian Session 4h từ bộ nhớ
   useEffect(() => {
     if (user?.email) {
       const isSuper = SUPER_ADMIN_EMAILS.includes(user.email);
@@ -130,7 +132,18 @@ export default function App() {
       
       setIsSuperAdmin(isSuper);
       setIsAdmin(hasAdminRights);
-      if (hasAdminRights) setSessionStartTime(prev => prev || Date.now());
+      
+      if (hasAdminRights) {
+        // Lấy thời gian đăng nhập cũ nếu có, nếu không thì lấy thời gian hiện tại
+        const storedTime = localStorage.getItem('adminLoginTime');
+        if (storedTime) {
+          setSessionStartTime(parseInt(storedTime));
+        } else {
+          const now = Date.now();
+          localStorage.setItem('adminLoginTime', now.toString());
+          setSessionStartTime(now);
+        }
+      }
     } else {
       setIsSuperAdmin(false);
       setIsAdmin(false);
@@ -145,21 +158,22 @@ export default function App() {
         const hoursElapsed = (Date.now() - sessionStartTime) / (1000 * 60 * 60);
         if (hoursElapsed >= 4) {
           handleAdminLogout();
-          showAlert('Hết hạn phiên', 'Phiên đăng nhập quản trị đã hết hạn (4 giờ). Vui lòng đăng nhập lại để đảm bảo an toàn.');
+          showAlert('Hết hạn phiên', 'Phiên đăng nhập quản trị đã tự động hết hạn (4 giờ). Vui lòng đăng nhập lại để đảm bảo an toàn dữ liệu.');
         }
       };
 
-      checkSession();
-      const interval = setInterval(checkSession, 60000); 
+      checkSession(); // Gọi ngay lần đầu
+      const interval = setInterval(checkSession, 60000); // Check mỗi phút
       return () => clearInterval(interval);
     }
   }, [isAdmin, sessionStartTime]);
 
+  // Đảm bảo không bị kẹt ở màn hình admin nếu mất quyền (VD: Bị thu hồi quyền)
   useEffect(() => {
-    if (view === 'admin' && !isAdmin) {
+    if (user && view === 'admin' && !isAdmin) {
       setView('form');
     }
-  }, [view, isAdmin]);
+  }, [view, isAdmin, user]);
 
   const MAX_PER_SLOT = 10;
   const SLOTS = ['9:00', '9:30', '10:00', '15:00', '15:30', '16:00', '16:30'];
@@ -177,7 +191,7 @@ export default function App() {
     return counts;
   }, [todayRegistrations]);
 
-  // Logic Xử lý Dữ liệu Biểu đồ (Ngày / Tuần / Tháng)
+  // Logic Biểu đồ
   const chartData = useMemo(() => {
     if (chartType === 'day') {
       const data = SLOTS.map(slot => ({
@@ -188,9 +202,9 @@ export default function App() {
       return data.map(d => ({ ...d, max: maxVal }));
     } else if (chartType === 'week') {
       const curr = parseDateSafe(selectedDate);
-      let dayOfWeek = curr.getDay(); // 0 là CN, 1 là T2
+      let dayOfWeek = curr.getDay(); 
       const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-      curr.setDate(curr.getDate() + diffToMonday); // Lui về Thứ 2 của tuần đó
+      curr.setDate(curr.getDate() + diffToMonday); 
       
       const days = [];
       const labels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
@@ -203,19 +217,17 @@ export default function App() {
           count: registrations.filter(r => r.date === dString).length,
         });
       }
-      const maxVal = Math.max(...days.map(d => d.count), 1); // Lấy cột cao nhất làm chuẩn
+      const maxVal = Math.max(...days.map(d => d.count), 1); 
       return days.map(d => ({ ...d, max: maxVal }));
     } else if (chartType === 'month') {
       const curr = parseDateSafe(selectedDate);
       const year = curr.getFullYear();
       const month = curr.getMonth();
-      const numDays = new Date(year, month + 1, 0).getDate(); // Số ngày trong tháng
+      const numDays = new Date(year, month + 1, 0).getDate(); 
       
       const weeks = [
-        { label: 'Tuần 1', count: 0 },
-        { label: 'Tuần 2', count: 0 },
-        { label: 'Tuần 3', count: 0 },
-        { label: 'Tuần 4', count: 0 },
+        { label: 'Tuần 1', count: 0 }, { label: 'Tuần 2', count: 0 },
+        { label: 'Tuần 3', count: 0 }, { label: 'Tuần 4', count: 0 },
         { label: 'Tuần 5', count: 0 }
       ];
 
@@ -228,9 +240,7 @@ export default function App() {
         else if (i <= 28) weeks[3].count += countForDay;
         else weeks[4].count += countForDay;
       }
-      
-      if (numDays === 28) weeks.pop(); // Tháng 2 năm không nhuận chỉ có 4 tuần tròn
-
+      if (numDays === 28) weeks.pop(); 
       const maxVal = Math.max(...weeks.map(w => w.count), 1);
       return weeks.map(w => ({ ...w, max: maxVal }));
     }
@@ -242,10 +252,7 @@ export default function App() {
     if (isLoggingIn) return;
     try {
       if (window.self !== window.top) {
-        showAlert(
-          "Cần mở tab mới để đăng nhập",
-          "Bạn đang xem trước trang web trong một khung thu nhỏ. Vì lý do bảo mật, Google chặn không cho hiển thị bảng đăng nhập tại đây.\n\n👉 Vui lòng mở trang web này ở một TAB MỚI (hoặc dùng đường link Vercel chính thức của bạn) để đăng nhập quản trị an toàn."
-        );
+        showAlert("Cần mở tab mới", "Vui lòng mở ứng dụng này ở một TAB MỚI (hoặc dùng link Vercel của bạn) để tính năng đăng nhập Google hoạt động.");
         return;
       }
     } catch (e) { }
@@ -265,20 +272,12 @@ export default function App() {
       if (isSuper || isDynamicAdmin) {
         setView('admin');
       } else {
-        showAlert(
-          "Không có quyền truy cập", 
-          `Tài khoản "${email}" chưa được phân quyền quản trị.\n\nNếu bạn là nhân viên, vui lòng liên hệ Quản trị viên gốc để được cấp quyền.`
-        );
+        showAlert("Không có quyền", `Tài khoản "${email}" chưa được cấp quyền quản trị.`);
         handleAdminLogout();
       }
     } catch (error) {
       if (error.code === 'auth/unauthorized-domain') {
-        const currentDomain = window.location.hostname;
-        showAlert('Lỗi Tên Miền Chưa Cấp Phép', `Tên miền "${currentDomain}" đang bị Firebase chặn đăng nhập.\n\nĐể sửa lỗi:\n1. Mở Firebase Console -> Authentication -> Settings -> Authorized domains.\n2. Thêm "${currentDomain}" vào danh sách.\n3. Lưu lại và thử đăng nhập lại.`);
-      } else if (error.code === 'auth/operation-not-allowed') {
-        showAlert('Chưa Bật Đăng Nhập Bằng Google', 'Bạn chưa kích hoạt phương thức đăng nhập này trên Firebase.\n\n👉 Cách sửa lỗi:\n1. Mở Firebase Console -> Authentication -> Sign-in method.\n2. Bấm "Add new provider" -> Chọn Google.\n3. Bật "Enable" (Cho phép).\n4. RẤT QUAN TRỌNG: Chọn "Project support email" (Email hỗ trợ dự án) rồi bấm Lưu (Save).');
-      } else if (error.code === 'auth/popup-blocked') {
-        showAlert('Trình duyệt chặn Pop-up', 'Trình duyệt của bạn đang chặn cửa sổ đăng nhập. Vui lòng nhìn lên thanh địa chỉ (góc trên bên phải), bấm vào biểu tượng cảnh báo và chọn "Luôn cho phép cửa sổ bật lên" (Always allow pop-ups) cho trang web này.');
+        showAlert('Lỗi Tên Miền', `Tên miền hiện tại đang bị Firebase chặn. Cần vào Firebase Console -> Authentication -> Settings -> Authorized domains để thêm tên miền này vào.`);
       } else if (error.code !== 'auth/popup-closed-by-user') {
         showAlert('Lỗi Đăng Nhập', `Hệ thống báo lỗi: ${error.message}`);
       }
@@ -287,15 +286,13 @@ export default function App() {
     }
   };
 
+  // Đăng xuất và dọn dẹp biến LocalStorage
   const handleAdminLogout = async () => {
-    await signOut(auth);
     localStorage.removeItem('adminLoginTime'); 
-    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-    } else {
-        await signInAnonymously(auth);
-    }
+    localStorage.setItem('appView', 'form');
     setView('form');
+    await signOut(auth);
+    // Lưu ý: Sau lệnh signOut, hook onAuthStateChanged sẽ tự động bắt sự kiện và gọi đăng nhập ẩn danh lại.
   };
 
   const exportToExcel = () => {
@@ -303,16 +300,10 @@ export default function App() {
     const rows = [...todayRegistrations]
       .sort((a,b) => a.slot.localeCompare(b.slot))
       .map(reg => [
-        reg.slot,
-        `"${reg.name}"`, 
-        `"${reg.phone}"`,
-        `"${reg.agency}"`,
-        reg.date.split('-').reverse().join('/')
+        reg.slot, `"${reg.name}"`, `"${reg.phone}"`, `"${reg.agency}"`, reg.date.split('-').reverse().join('/')
       ]);
 
-    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
-      + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -329,19 +320,15 @@ export default function App() {
     try {
       const path = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
       await addDoc(path, {
-        name: name.trim(),
-        phone: phone.trim(),
-        agency: agency.trim(),
-        date: selectedDate,
-        slot: selectedSlot,
-        timestamp: serverTimestamp(),
-        userId: user.uid
+        name: name.trim(), phone: phone.trim(), agency: agency.trim(),
+        date: selectedDate, slot: selectedSlot,
+        timestamp: serverTimestamp(), userId: user.uid
       });
       setSubmitStatus({ loading: false, success: true, error: null });
       setName(''); setPhone(''); setAgency(''); setSelectedSlot('');
       setTimeout(() => setSubmitStatus(prev => ({ ...prev, success: false })), 4000);
     } catch (error) {
-      setSubmitStatus({ loading: false, success: false, error: 'Có lỗi xảy ra khi gửi đăng ký.' });
+      setSubmitStatus({ loading: false, success: false, error: 'Có lỗi xảy ra.' });
     }
   };
 
@@ -370,14 +357,9 @@ export default function App() {
             <p className="text-sm text-gray-600 mb-8 whitespace-pre-wrap leading-relaxed">{modal.message}</p>
             <div className="flex justify-end gap-3">
               {modal.type === 'confirm' && (
-                <button onClick={closeModal} className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-bold transition-colors">
-                  Hủy
-                </button>
+                <button onClick={closeModal} className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-bold transition-colors">Hủy</button>
               )}
-              <button 
-                onClick={() => { if (modal.onConfirm) modal.onConfirm(); closeModal(); }}
-                className={`px-5 py-2.5 text-white rounded-xl text-sm font-bold shadow-md transition-colors ${modal.type === 'confirm' ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-orange-600 hover:bg-orange-700 shadow-orange-200'}`}
-              >
+              <button onClick={() => { if (modal.onConfirm) modal.onConfirm(); closeModal(); }} className={`px-5 py-2.5 text-white rounded-xl text-sm font-bold shadow-md transition-colors ${modal.type === 'confirm' ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-orange-600 hover:bg-orange-700 shadow-orange-200'}`}>
                 {modal.type === 'confirm' ? 'Xác nhận Xóa' : 'Đã hiểu'}
               </button>
             </div>
@@ -430,14 +412,7 @@ export default function App() {
                       <span>{selectedDate.split('-').reverse().join('/')}</span>
                       <Calendar className="h-5 w-5 text-gray-400" />
                     </div>
-                    <input 
-                      type="date" 
-                      min={today} 
-                      value={selectedDate} 
-                      onChange={(e) => setSelectedDate(e.target.value)} 
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer block box-border" 
-                      required 
-                    />
+                    <input type="date" min={today} value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer block box-border" required />
                   </div>
                 </div>
 
@@ -449,22 +424,11 @@ export default function App() {
                       const isSelected = selectedSlot === slot;
                       return (
                         <button 
-                          key={slot} 
-                          type="button" 
-                          disabled={isFull}
-                          onClick={() => setSelectedSlot(slot)} 
-                          className={`py-3 px-1 text-xs font-bold rounded-xl border-2 transition-all flex flex-col items-center justify-center ${
-                            isFull 
-                              ? 'bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed' 
-                              : isSelected 
-                                ? 'bg-orange-600 border-orange-600 text-white shadow-lg shadow-orange-200 scale-105' 
-                                : 'bg-white border-gray-100 text-gray-600 hover:border-orange-200'
-                          }`}
+                          key={slot} type="button" disabled={isFull} onClick={() => setSelectedSlot(slot)} 
+                          className={`py-3 px-1 text-xs font-bold rounded-xl border-2 transition-all flex flex-col items-center justify-center ${isFull ? 'bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed' : isSelected ? 'bg-orange-600 border-orange-600 text-white shadow-lg shadow-orange-200 scale-105' : 'bg-white border-gray-100 text-gray-600 hover:border-orange-200'}`}
                         >
                           <span>{slot}</span>
-                          <span className={`text-[9px] mt-1 font-normal ${isSelected ? 'text-orange-100' : 'text-gray-400'}`}>
-                            {isFull ? 'Kín' : `Còn ${MAX_PER_SLOT - slotCounts[slot]}`}
-                          </span>
+                          <span className={`text-[9px] mt-1 font-normal ${isSelected ? 'text-orange-100' : 'text-gray-400'}`}>{isFull ? 'Kín' : `Còn ${MAX_PER_SLOT - slotCounts[slot]}`}</span>
                         </button>
                       );
                     })}
@@ -480,15 +444,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <button 
-                  type="submit" 
-                  disabled={submitStatus.loading || !isFormValid} 
-                  className={`w-full py-4 rounded-2xl font-bold transition-all ${
-                    isFormValid && !submitStatus.loading 
-                      ? 'bg-orange-600 hover:bg-orange-700 active:scale-95 text-white shadow-xl shadow-orange-200' 
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
-                  }`}
-                >
+                <button type="submit" disabled={submitStatus.loading || !isFormValid} className={`w-full py-4 rounded-2xl font-bold transition-all ${isFormValid && !submitStatus.loading ? 'bg-orange-600 hover:bg-orange-700 active:scale-95 text-white shadow-xl shadow-orange-200' : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'}`}>
                   {submitStatus.loading ? "ĐANG GỬI..." : "XÁC NHẬN ĐĂNG KÝ"}
                 </button>
               </form>
@@ -503,18 +459,14 @@ export default function App() {
                   <h2 className="text-white font-bold flex items-center"><LayoutDashboard className="mr-2 h-5 w-5"/> Bảng Thống Kê</h2>
                   <div className="flex gap-2 w-full sm:w-auto">
                     
-                    {/* TRÁNG GƯƠNG NGÀY CHO ADMIN: HIỂN THỊ DD/MM/YYYY NHƯNG GIỮ NGUYÊN CHỨC NĂNG CHỌN NGÀY */}
-                    <div className="relative flex-1 sm:w-40">
-                      <div className="w-full px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs font-medium flex justify-between items-center pointer-events-none">
+                    <div className="relative flex-1 sm:w-40" title={!isSuperAdmin ? "Chỉ Admin Tổng mới được thay đổi ngày" : "Chọn ngày"}>
+                      <div className={`w-full px-3 py-2.5 bg-gray-800 border ${!isSuperAdmin ? 'border-gray-700 opacity-60' : 'border-gray-700'} rounded-lg text-white text-xs font-medium flex justify-between items-center pointer-events-none`}>
                         <span>{selectedDate.split('-').reverse().join('/')}</span>
                         <Calendar className="h-4 w-4 text-gray-400" />
                       </div>
-                      <input 
-                        type="date" 
-                        value={selectedDate} 
-                        onChange={(e) => setSelectedDate(e.target.value)} 
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer block box-border" 
-                      />
+                      {isSuperAdmin && (
+                        <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer block box-border" />
+                      )}
                     </div>
                     
                     <button onClick={exportToExcel} className="bg-green-600 hover:bg-green-500 text-white px-3 py-2 rounded-lg flex items-center justify-center text-xs font-bold transition-colors shadow-sm">
@@ -523,15 +475,10 @@ export default function App() {
                   </div>
                 </div>
                 
-                {/* CHỈ SUPER ADMIN MỚI THẤY BIỂU ĐỒ NÀY */}
                 {isSuperAdmin && (
                   <div className="p-5 border-b border-gray-100 bg-gray-50/50">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-                      <h3 className="text-xs font-bold text-gray-500 uppercase flex items-center">
-                        <BarChart3 className="h-4 w-4 mr-1.5" /> Biểu đồ lượng khách
-                      </h3>
-                      
-                      {/* BỘ LỌC BIỂU ĐỒ: NGÀY/TUẦN/THÁNG */}
+                      <h3 className="text-xs font-bold text-gray-500 uppercase flex items-center"><BarChart3 className="h-4 w-4 mr-1.5" /> Biểu đồ lượng khách</h3>
                       <div className="flex bg-gray-200 p-0.5 rounded-lg w-full sm:w-auto">
                         <button onClick={() => setChartType('day')} className={`flex-1 sm:flex-none px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${chartType === 'day' ? 'bg-white shadow text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}>Ngày</button>
                         <button onClick={() => setChartType('week')} className={`flex-1 sm:flex-none px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${chartType === 'week' ? 'bg-white shadow text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}>Tuần</button>
@@ -546,10 +493,7 @@ export default function App() {
                           <div key={idx} className="flex-1 min-w-[30px] flex flex-col items-center justify-end h-full">
                             <span className="text-[10px] font-bold text-orange-600 mb-1">{item.count > 0 ? item.count : '0'}</span>
                             <div className="w-full max-w-[32px] bg-gray-200 rounded-t-sm relative flex justify-center items-end" style={{ height: '100%' }}>
-                              <div 
-                                className="w-full rounded-t-sm transition-all duration-700 bg-orange-500" 
-                                style={{ height: `${heightPercent}%` }}
-                              ></div>
+                              <div className="w-full rounded-t-sm transition-all duration-700 bg-orange-500" style={{ height: `${heightPercent}%` }}></div>
                             </div>
                             <span className="text-[9px] text-gray-600 mt-1.5 font-medium whitespace-nowrap">{item.label}</span>
                           </div>
@@ -559,28 +503,20 @@ export default function App() {
                   </div>
                 )}
 
-                {/* DANH SÁCH KHÁCH HÀNG NHÓM THEO KHUNG GIỜ */}
                 <div className="p-4 sm:p-5 bg-white">
-                  <h3 className="text-xs font-bold text-gray-500 uppercase flex items-center mb-4">
-                    <Users className="h-4 w-4 mr-1.5" /> Danh sách khách theo khung giờ
-                  </h3>
-                  
+                  <h3 className="text-xs font-bold text-gray-500 uppercase flex items-center mb-4"><Users className="h-4 w-4 mr-1.5" /> Danh sách khách theo khung giờ</h3>
                   <div className="space-y-4">
                     {todayRegistrations.length === 0 ? (
-                      <div className="p-10 text-center text-gray-400 border border-dashed border-gray-200 rounded-2xl">
-                        Không có đăng ký nào trong ngày này
-                      </div>
+                      <div className="p-10 text-center text-gray-400 border border-dashed border-gray-200 rounded-2xl">Không có đăng ký nào trong ngày này</div>
                     ) : (
                       SLOTS.map(slot => {
                         const slotRegs = todayRegistrations.filter(r => r.slot === slot);
-                        if (slotRegs.length === 0) return null; // Ẩn các khung giờ chưa có khách
+                        if (slotRegs.length === 0) return null; 
                         
                         return (
                           <div key={slot} className="border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
                             <div className="bg-orange-50/50 px-4 py-3 border-b border-gray-100 flex justify-between items-center">
-                              <div className="font-bold text-orange-700 flex items-center">
-                                <Clock className="h-4 w-4 mr-1.5"/> Khung giờ: {slot}
-                              </div>
+                              <div className="font-bold text-orange-700 flex items-center"><Clock className="h-4 w-4 mr-1.5"/> Khung giờ: {slot}</div>
                               <span className="text-[10px] font-bold text-orange-600 bg-white px-2 py-1 rounded-lg border border-orange-100 shadow-sm">
                                 {slotRegs.length} / {MAX_PER_SLOT} khách
                               </span>
@@ -603,9 +539,7 @@ export default function App() {
                                       <td className="p-3 text-gray-500 italic">{reg.agency}</td>
                                       {isSuperAdmin && (
                                         <td className="p-3 text-right">
-                                          <button onClick={() => handleDelete(reg.id)} className="text-gray-300 hover:text-red-500 transition-colors">
-                                            <Trash2 className="h-4 w-4"/>
-                                          </button>
+                                          <button onClick={() => handleDelete(reg.id)} className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 className="h-4 w-4"/></button>
                                         </td>
                                       )}
                                     </tr>
@@ -621,12 +555,9 @@ export default function App() {
                 </div>
              </div>
              
-             {/* CHỈ SUPER ADMIN MỚI ĐƯỢC XEM/SỬA PHẦN PHÂN QUYỀN NÀY */}
              {isSuperAdmin && (
                <div className="bg-white p-6 rounded-3xl shadow-xl border border-gray-100">
-                  <h3 className="font-bold flex items-center text-gray-800 mb-4">
-                    <Shield className="mr-2 h-5 w-5 text-indigo-500"/> Quản lý Admin (Dành riêng cho bạn)
-                  </h3>
+                  <h3 className="font-bold flex items-center text-gray-800 mb-4"><Shield className="mr-2 h-5 w-5 text-indigo-500"/> Quản lý Admin (Dành riêng cho bạn)</h3>
                   <form onSubmit={async (e) => {
                     e.preventDefault();
                     if(!newAdminEmail.trim()) return;
