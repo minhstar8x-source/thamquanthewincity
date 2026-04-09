@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
-import { Calendar, Clock, Users, User, Phone, CheckCircle, AlertCircle, Trash2, LayoutDashboard, ClipboardList, Building, LogIn, LogOut, Shield, ShieldAlert, Download, BarChart3, X } from 'lucide-react';
+import { Calendar, Clock, Users, User, Phone, CheckCircle, AlertCircle, Trash2, LayoutDashboard, ClipboardList, Building, LogIn, LogOut, Shield, ShieldAlert, Download, BarChart3, X, Info } from 'lucide-react';
 
 // ==========================================
 // 1. CẤU HÌNH FIREBASE CỦA BẠN
@@ -10,7 +10,7 @@ import { Calendar, Clock, Users, User, Phone, CheckCircle, AlertCircle, Trash2, 
 const firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config 
   ? JSON.parse(__firebase_config) 
   : {
-    apiKey: "AIzaSyCKNBg-CPwmHRZDbPt0NZ0iRQvSj4Cu7f0",
+      apiKey: "AIzaSyCKNBg-CPwmHRZDbPt0NZ0iRQvSj4Cu7f0",
     authDomain: "the-win-city-booking.firebaseapp.com",
     projectId: "the-win-city-booking",
     storageBucket: "the-win-city-booking.firebasestorage.app",
@@ -29,7 +29,7 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'the-win-city-booking
 const SUPER_ADMIN_EMAILS = [
   'minhpv@thangloigroup.vn', // Thay Gmail của bạn vào đây
   'nguyennk@thangloigroup.vn',
-  'lanvt@thangloigroup.vn'
+  'lanvt@thangloigroup.vn' 
 ];
 
 // ==========================================
