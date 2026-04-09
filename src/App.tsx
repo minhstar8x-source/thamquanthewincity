@@ -32,6 +32,14 @@ const SUPER_ADMIN_EMAILS = [
   'lanvt@thangloigroup.vn'
 ];
 
+// ==========================================
+// 3. HÌNH NỀN ỨNG DỤNG
+// Link Facebook (fbcdn.net) tự động hết hạn sau vài ngày. 
+// Hãy up ảnh của bạn lên trang như postimages.org hoặc imgur.com, 
+// copy link trực tiếp (.jpg/.png) và dán vào giữa 2 dấu nháy kép bên dưới:
+// ==========================================
+const BACKGROUND_URL = "https://i.postimg.cc/7hQSRb42/660431692-122180502596789445-5003665343564458581-n.jpg";
+
 // Lấy ngày hiện tại theo giờ VN
 const getVietnamDateString = () => {
   return new Intl.DateTimeFormat('en-CA', {
@@ -53,6 +61,19 @@ const formatDateSafe = (date) => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 
+// CẤU HÌNH LỊCH THEO THỨ TỰ TRONG TUẦN
+const getSlotsForDate = (dateStr) => {
+  if (!dateStr) return [];
+  const d = parseDateSafe(dateStr);
+  const day = d.getDay(); // 0 là CN, 1 là T2, 6 là T7
+  
+  if (day === 1) return []; // Thứ 2 nghỉ
+  if (day >= 2 && day <= 5) return ['9:30', '15:00']; // Thứ 3 - Thứ 6
+  if (day === 6) return ['9:00', '9:30', '11:00', '11:30', '15:00', '15:30', '16:00', '16:30']; // Thứ 7
+  if (day === 0) return ['9:30', '10:30', '15:00', '15:30']; // Chủ nhật
+  return [];
+};
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -60,7 +81,6 @@ export default function App() {
   const [registrations, setRegistrations] = useState([]);
   const [adminsList, setAdminsList] = useState([]); 
   
-  // GHI NHỚ MÀN HÌNH ĐANG XEM (FORM HOẶC ADMIN) ĐỂ KHI F5 KHÔNG BỊ NHẢY TRANG
   const [view, setView] = useState(() => localStorage.getItem('appView') || 'form'); 
   useEffect(() => { localStorage.setItem('appView', view); }, [view]);
 
@@ -85,14 +105,11 @@ export default function App() {
 
   const isFormValid = name.trim() !== '' && phone.trim() !== '' && agency.trim() !== '' && selectedSlot !== '';
 
-  // KHỞI TẠO AUTH (ĐÃ SỬA LỖI ĐÁ VĂNG SESSION KHI LOAD LẠI TRANG)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        // Nếu có tài khoản Google được lưu lại từ trước, giữ nguyên không làm gì cả
         setUser(currentUser);
       } else {
-        // Nếu không có bất kỳ ai đăng nhập, mới gọi Đăng nhập Ẩn danh
         try {
           if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
             await signInWithCustomToken(auth, __initial_auth_token);
@@ -107,7 +124,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Lấy dữ liệu Realtime
   useEffect(() => {
     if (!user) return;
     const regPath = collection(db, 'artifacts', appId, 'public', 'data', 'registrations'); 
@@ -125,7 +141,6 @@ export default function App() {
     return () => { unsubReg(); unsubAdmin(); };
   }, [user]);
 
-  // Kiểm tra quyền & Phục hồi Thời gian Session 4h từ bộ nhớ
   useEffect(() => {
     if (user?.email) {
       const isSuper = SUPER_ADMIN_EMAILS.includes(user.email);
@@ -136,7 +151,6 @@ export default function App() {
       setIsAdmin(hasAdminRights);
       
       if (hasAdminRights) {
-        // Lấy thời gian đăng nhập cũ nếu có, nếu không thì lấy thời gian hiện tại
         const storedTime = localStorage.getItem('adminLoginTime');
         if (storedTime) {
           setSessionStartTime(parseInt(storedTime));
@@ -153,7 +167,6 @@ export default function App() {
     }
   }, [user, adminsList]);
 
-  // Bộ đếm Hết hạn phiên (4 giờ)
   useEffect(() => {
     if (isAdmin && sessionStartTime) {
       const checkSession = () => {
@@ -164,13 +177,12 @@ export default function App() {
         }
       };
 
-      checkSession(); // Gọi ngay lần đầu
-      const interval = setInterval(checkSession, 60000); // Check mỗi phút
+      checkSession(); 
+      const interval = setInterval(checkSession, 60000); 
       return () => clearInterval(interval);
     }
   }, [isAdmin, sessionStartTime]);
 
-  // Đảm bảo không bị kẹt ở màn hình admin nếu mất quyền (VD: Bị thu hồi quyền)
   useEffect(() => {
     if (user && view === 'admin' && !isAdmin) {
       setView('form');
@@ -178,7 +190,9 @@ export default function App() {
   }, [view, isAdmin, user]);
 
   const MAX_PER_SLOT = 10;
-  const SLOTS = ['9:00', '9:30', '10:00', '15:00', '15:30', '16:00', '16:30'];
+  
+  // Lấy các khung giờ quy định cho ngày đang chọn
+  const currentSlots = useMemo(() => getSlotsForDate(selectedDate), [selectedDate]);
 
   const todayRegistrations = useMemo(() => {
     return registrations.filter(reg => reg.date === selectedDate);
@@ -186,38 +200,47 @@ export default function App() {
 
   const slotCounts = useMemo(() => {
     const counts = {};
-    SLOTS.forEach(s => counts[s] = 0);
+    currentSlots.forEach(s => counts[s] = 0);
     todayRegistrations.forEach(reg => {
       if (counts[reg.slot] !== undefined) counts[reg.slot]++;
+      else counts[reg.slot] = 1; // Trường hợp data cũ còn lưu
     });
     return counts;
-  }, [todayRegistrations]);
+  }, [todayRegistrations, currentSlots]);
 
-  // Lọc chỉ giữ lại các khung giờ khả dụng (chưa qua) cho hôm nay
+  // Lọc chỉ giữ lại các khung giờ khả dụng (chưa qua, KHÓA TRƯỚC 10 PHÚT)
   const availableSlots = useMemo(() => {
     const isToday = selectedDate === today;
     const now = new Date();
     const currentTimeInMinutes = now.getHours() * 60 + now.getMinutes();
 
-    return SLOTS.filter(slot => {
-      if (!isToday) return true; // Các ngày tương lai đều khả dụng
+    return currentSlots.filter(slot => {
+      if (!isToday) return true; // Tương lai thì mở hết
       const [slotHour, slotMinute] = slot.split(':').map(Number);
       const slotTimeInMinutes = slotHour * 60 + slotMinute;
-      return slotTimeInMinutes > currentTimeInMinutes;
+      // Khóa ca trước 10 phút (VD: ca 9h30 thì 9h20 là đóng)
+      return (slotTimeInMinutes - 10) > currentTimeInMinutes;
     });
-  }, [selectedDate, today]);
+  }, [selectedDate, today, currentSlots]);
 
-  // Reset selectedSlot nếu khung giờ đã chọn không còn khả dụng
   useEffect(() => {
     if (selectedSlot && !availableSlots.includes(selectedSlot)) {
       setSelectedSlot('');
     }
   }, [availableSlots, selectedSlot]);
 
-  // Logic Biểu đồ
+  // Gộp cả khung giờ hiện tại và khung giờ cũ (nếu có khách đã đăng ký trước khi đổi luật) để Admin dễ quản lý
+  const displaySlotsForAdmin = useMemo(() => {
+    return Array.from(new Set([...currentSlots, ...todayRegistrations.map(r => r.slot)])).sort((a,b) => {
+       const timeA = a.split(':').map(Number);
+       const timeB = b.split(':').map(Number);
+       return (timeA[0]*60 + timeA[1]) - (timeB[0]*60 + timeB[1]);
+    });
+  }, [currentSlots, todayRegistrations]);
+
   const chartData = useMemo(() => {
     if (chartType === 'day') {
-      const data = SLOTS.map(slot => ({
+      const data = displaySlotsForAdmin.map(slot => ({
         label: slot,
         count: registrations.filter(r => r.date === selectedDate && r.slot === slot).length
       }));
@@ -268,9 +291,8 @@ export default function App() {
       return weeks.map(w => ({ ...w, max: maxVal }));
     }
     return [];
-  }, [chartType, selectedDate, registrations]);
+  }, [chartType, selectedDate, registrations, displaySlotsForAdmin]);
 
-  // Đăng nhập Admin
   const handleAdminLogin = async () => {
     if (isLoggingIn) return;
     try {
@@ -309,13 +331,11 @@ export default function App() {
     }
   };
 
-  // Đăng xuất và dọn dẹp biến LocalStorage
   const handleAdminLogout = async () => {
     localStorage.removeItem('adminLoginTime'); 
     localStorage.setItem('appView', 'form');
     setView('form');
     await signOut(auth);
-    // Lưu ý: Sau lệnh signOut, hook onAuthStateChanged sẽ tự động bắt sự kiện và gọi đăng nhập ẩn danh lại.
   };
 
   const exportToExcel = () => {
@@ -369,7 +389,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 font-sans selection:bg-orange-100 overflow-x-hidden">
       
-      {/* MODAL */}
       {modal.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 animate-in zoom-in-95 duration-200">
@@ -390,7 +409,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Navbar */}
       <nav className="bg-white shadow-md sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-4 flex justify-between h-14 items-center">
           <div className="flex items-center font-bold text-lg text-orange-700 truncate mr-2">
@@ -410,7 +428,7 @@ export default function App() {
           <div className="max-w-xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
             <div 
               className="relative px-6 py-12 text-center bg-cover bg-center"
-              style={{ backgroundImage: "url('https://scontent.fsgn22-1.fna.fbcdn.net/v/t39.30808-6/660431692_122180502596789445_5003665343564458581_n.jpg?_nc_cat=107&ccb=1-7&_nc_sid=2a1932&_nc_ohc=jHjZgb04H28Q7kNvwH2hVPa&_nc_oc=AdoCgaIW2wuSOFyFC2M_KDfBiMK3woHbmlzmTOpXqYuF0nT6oMKa7a9-cFTwI_IKvto&_nc_zt=23&_nc_ht=scontent.fsgn22-1.fna&_nc_gid=tYYixgtD1TRQzDBPTgvrWA&_nc_ss=7a3a8&oh=00_Af3O2D0YVnYMtzb0WXspl18l-Tpxtx1LZnpafIhoesQGhw&oe=69D745BB')" }}
+              style={{ backgroundImage: `url('${BACKGROUND_URL}')` }}
             >
               <div className="absolute inset-0 bg-gradient-to-b from-orange-900/60 to-orange-800/40"></div>
               <div className="relative z-10 text-white">
@@ -435,13 +453,13 @@ export default function App() {
                       <span>{selectedDate.split('-').reverse().join('/')}</span>
                       <Calendar className="h-5 w-5 text-gray-400" />
                     </div>
+                    {/* BẢN SỬA LỖI: Dùng CSS để kéo giãn biểu tượng chọn lịch ra toàn bộ màn hình, tránh lỗi Security iframe */}
                     <input 
                       type="date" 
                       min={today} 
                       value={selectedDate} 
                       onChange={(e) => setSelectedDate(e.target.value)} 
-                      onClick={(e) => e.target.showPicker && e.target.showPicker()}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer block box-border z-10" 
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer box-border z-10 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer" 
                       required 
                     />
                   </div>
@@ -450,7 +468,12 @@ export default function App() {
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">Chọn khung giờ</label>
                   
-                  {availableSlots.length === 0 ? (
+                  {currentSlots.length === 0 ? (
+                    <div className="w-full py-5 px-3 text-center text-sm font-medium text-orange-600 bg-orange-50 border border-dashed border-orange-200 rounded-2xl flex flex-col items-center justify-center">
+                      <AlertCircle className="h-6 w-6 mb-2 opacity-80" />
+                      Hôm nay không có lịch tham quan công trường. Mời Quý khách vui lòng chọn ngày tiếp theo nhé!
+                    </div>
+                  ) : availableSlots.length === 0 ? (
                     <div className="w-full py-4 px-3 text-center text-sm font-medium text-gray-500 bg-gray-50 border border-dashed border-gray-200 rounded-2xl">
                       Đã hết khung giờ khả dụng cho hôm nay.
                     </div>
@@ -465,7 +488,7 @@ export default function App() {
                             className={`py-3 px-1 text-xs font-bold rounded-xl border-2 transition-all flex flex-col items-center justify-center ${isFull ? 'bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed' : isSelected ? 'bg-orange-600 border-orange-600 text-white shadow-lg shadow-orange-200 scale-105' : 'bg-white border-gray-100 text-gray-600 hover:border-orange-200'}`}
                           >
                             <span>{slot}</span>
-                            <span className={`text-[9px] mt-1 font-normal ${isSelected ? 'text-orange-100' : 'text-gray-400'}`}>{isFull ? 'Kín' : `Còn ${MAX_PER_SLOT - slotCounts[slot]}`}</span>
+                            <span className={`text-[9px] mt-1 font-normal ${isSelected ? 'text-orange-100' : 'text-gray-400'}`}>{isFull ? 'Kín' : `Còn ${MAX_PER_SLOT - slotCounts[slot]} ghế`}</span>
                           </button>
                         );
                       })}
@@ -482,9 +505,15 @@ export default function App() {
                   </div>
                 </div>
 
-                <button type="submit" disabled={submitStatus.loading || !isFormValid} className={`w-full py-4 rounded-2xl font-bold transition-all ${isFormValid && !submitStatus.loading ? 'bg-orange-600 hover:bg-orange-700 active:scale-95 text-white shadow-xl shadow-orange-200' : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'}`}>
-                  {submitStatus.loading ? "ĐANG GỬI..." : "XÁC NHẬN ĐĂNG KÝ"}
-                </button>
+                <div className="pt-2">
+                  <div className="bg-orange-50 text-orange-700 text-xs px-4 py-3 rounded-xl border border-orange-100 flex items-start mb-4 shadow-sm">
+                    <Info className="h-4 w-4 mr-2 flex-shrink-0 mt-0.5" />
+                    <p><strong>Lưu ý:</strong> Một lần đăng ký trên hệ thống chỉ dành cho <strong className="text-orange-800">1 khách tham quan</strong>. Nếu đi theo nhóm, vui lòng điền thông tin đăng ký riêng cho từng khách.</p>
+                  </div>
+                  <button type="submit" disabled={submitStatus.loading || !isFormValid} className={`w-full py-4 rounded-2xl font-bold transition-all ${isFormValid && !submitStatus.loading ? 'bg-orange-600 hover:bg-orange-700 active:scale-95 text-white shadow-xl shadow-orange-200' : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'}`}>
+                    {submitStatus.loading ? "ĐANG GỬI..." : "XÁC NHẬN ĐĂNG KÝ"}
+                  </button>
+                </div>
               </form>
             </div>
           </div>
@@ -497,20 +526,17 @@ export default function App() {
                   <h2 className="text-white font-bold flex items-center"><LayoutDashboard className="mr-2 h-5 w-5"/> Bảng Thống Kê</h2>
                   <div className="flex gap-2 w-full sm:w-auto">
                     
-                    <div className="relative flex-1 sm:w-40" title={!isSuperAdmin ? "Chỉ Admin Tổng mới được thay đổi ngày" : "Chọn ngày"}>
-                      <div className={`w-full px-3 py-2.5 bg-gray-800 border ${!isSuperAdmin ? 'border-gray-700 opacity-60' : 'border-gray-700'} rounded-lg text-white text-xs font-medium flex justify-between items-center pointer-events-none`}>
+                    <div className="relative flex-1 sm:w-40" title="Chọn ngày">
+                      <div className="w-full px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-xs font-medium flex justify-between items-center pointer-events-none">
                         <span>{selectedDate.split('-').reverse().join('/')}</span>
                         <Calendar className="h-4 w-4 text-gray-400" />
                       </div>
-                      {isSuperAdmin && (
-                        <input 
-                          type="date" 
-                          value={selectedDate} 
-                          onChange={(e) => setSelectedDate(e.target.value)} 
-                          onClick={(e) => e.target.showPicker && e.target.showPicker()}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer block box-border z-10" 
-                        />
-                      )}
+                      <input 
+                        type="date" 
+                        value={selectedDate} 
+                        onChange={(e) => setSelectedDate(e.target.value)} 
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer box-border z-10 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer" 
+                      />
                     </div>
                     
                     <button onClick={exportToExcel} className="bg-green-600 hover:bg-green-500 text-white px-3 py-2 rounded-lg flex items-center justify-center text-xs font-bold transition-colors shadow-sm">
@@ -553,7 +579,7 @@ export default function App() {
                     {todayRegistrations.length === 0 ? (
                       <div className="p-10 text-center text-gray-400 border border-dashed border-gray-200 rounded-2xl">Không có đăng ký nào trong ngày này</div>
                     ) : (
-                      SLOTS.map(slot => {
+                      displaySlotsForAdmin.map(slot => {
                         const slotRegs = todayRegistrations.filter(r => r.slot === slot);
                         if (slotRegs.length === 0) return null; 
                         
