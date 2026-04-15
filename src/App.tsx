@@ -28,8 +28,7 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'the-win-city-booking
 // ==========================================
 const SUPER_ADMIN_EMAILS = [
   'minhpv@thangloigroup.vn', // Thay Gmail của bạn vào đây
-  'nguyennk@thangloigroup.vn',
-  'lanvt@thangloigroup.vn' 
+  'nguyennk@thangloigroup.vn'
 ];
 
 // ==========================================
